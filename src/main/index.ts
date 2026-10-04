@@ -66,7 +66,7 @@ if (isRegressionMode || isSmokeMode) {
         return
       }
       const mod = await import('./regression/index')
-      const ok = await mod.runRegression(path.join(app.getPath('temp'), 'hearth-regression'))
+      const ok = await mod.runRegression(path.join(app.getPath('temp'), 'uninvited-regression'))
       app.exit(ok ? 0 : 1)
     } catch (e) {
       console.error('[test] 运行失败', e)
@@ -144,7 +144,7 @@ function createPanelWindow(): BrowserWindow {
     minWidth: 780,
     minHeight: 560,
     autoHideMenuBar: true,
-    title: 'Hearth 围炉',
+    title: '不请自来 Uninvited',
     backgroundColor: '#F7FAF9',
     webPreferences: {
       preload: path.join(__dirname_, '../preload/index.mjs'),
@@ -292,7 +292,7 @@ function createTray(): void {
   }
   const icon = nativeImage.createFromBuffer(buf, { width: size, height: size })
   tray = new Tray(icon)
-  tray.setToolTip('Hearth 围炉')
+  tray.setToolTip('不请自来 Uninvited')
   refreshTrayMenu()
   tray.on('click', showPanel)
 }
@@ -300,7 +300,7 @@ function createTray(): void {
 function refreshTrayMenu(): void {
   if (!tray) return
   const menu = Menu.buildFromTemplate([
-    { label: '打开 Hearth', click: showPanel },
+    { label: '打开不请自来', click: showPanel },
     { type: 'separator' },
     { label: '显示/隐藏桌宠', click: () => togglePet() },
     { label: '转换历史…', click: showPanel },
@@ -352,7 +352,7 @@ async function setAutoLaunch(enable: boolean): Promise<void> {
         'add',
         'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run',
         '/v',
-        'Hearth',
+        'Uninvited',
         '/t',
         'REG_SZ',
         '/d',
@@ -377,10 +377,10 @@ async function readAutoLaunch(): Promise<void> {
     const run = promisify(execFile)
     const { stdout } = await run(
       'reg.exe',
-      ['query', 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run', '/v', 'Hearth'],
+      ['query', 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run', '/v', 'Uninvited'],
       { windowsHide: true }
     )
-    autoLaunchState = /Hearth\s+REG_SZ/i.test(stdout)
+    autoLaunchState = /Uninvited\s+REG_SZ/i.test(stdout)
   } catch {
     autoLaunchState = false
   }
@@ -463,7 +463,14 @@ function registerIpc(): void {
 
   // —— 设置与数据 ——
   ipcMain.handle('settings:get', async () => getSettings())
-  ipcMain.handle('settings:save', async (_e, patch: Partial<AppSettings>) => saveSettings(patch))
+  ipcMain.handle('settings:save', async (_e, patch: Partial<AppSettings>) => {
+    const saved = await saveSettings(patch)
+    // 换形象时通知桌宠窗口立即重建，无需重启
+    if (patch.petTheme) {
+      petWindow?.webContents.send('pet:theme', saved.petTheme)
+    }
+    return saved
+  })
   ipcMain.handle('settings:autolaunch', async (_e, enable: boolean) => setAutoLaunch(enable))
   ipcMain.handle('data:export', async () => exportAll())
   ipcMain.handle('data:wipe', async () => wipeAll())
@@ -569,7 +576,7 @@ app.whenReady().then(async () => {
   registerShortcuts()
 
   // 性能预算自检：空闲降帧已在渲染进程实现，这里记录启动完成时刻供后续测量
-  console.log(`[hearth] 启动完成，${new Date().toISOString()}`)
+  console.log(`[uninvited] 启动完成，${new Date().toISOString()}`)
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) petWindow = createPetWindow()
@@ -591,7 +598,7 @@ app.on('before-quit', () => {
 
 // 兜底：任何未捕获异常都不让桌宠静默消失
 process.on('uncaughtException', (err) => {
-  console.error('[hearth] 未捕获异常', err)
+  console.error('[uninvited] 未捕获异常', err)
 })
 
 // 首实例参数里带 --autostart 时不弹面板

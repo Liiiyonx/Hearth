@@ -273,7 +273,7 @@ function findEndOfCentralDirectory(buf: Buffer): number {
 // ==== 主流程 ====
 
 export async function runRegression(workDir: string): Promise<boolean> {
-  console.log('=== Hearth 转换回归测试 ===\n')
+  console.log('=== 不请自来 · 转换回归测试 ===\n')
   await fs.mkdir(workDir, { recursive: true })
   initStore()
 

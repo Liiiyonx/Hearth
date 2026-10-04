@@ -13,7 +13,7 @@ import { addHistory } from '../../store'
 /** 由方向推断默认输出文件名（不含扩展名） */
 function defaultOutputName(inputPath: string, direction: ConvertDirection): string {
   const base = path.basename(inputPath, path.extname(inputPath))
-  return `${base}.${direction === 'word2pdf' ? 'hearth-pdf' : 'hearth-docx'}`
+  return `${base}.${direction === 'word2pdf' ? 'uninvited-pdf' : 'uninvited-docx'}`
 }
 
 /** 探测文件类型：判断 PDF 是文本型还是扫描型 */

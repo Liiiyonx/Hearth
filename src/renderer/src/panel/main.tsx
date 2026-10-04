@@ -6,9 +6,11 @@ import type {
   AppSettings,
   EgressStatus,
   Persona,
-  LookupResult
+  LookupResult,
+  PetThemeId
 } from '../../../shared/types'
-import { PERF_BUDGET, EGRESS_CATEGORIES } from '../../../shared/types'
+import { THEME_LIST } from '../pet/themes'
+import { PERF_BUDGET, EGRESS_CATEGORIES, THEME_OPTIONS } from '../../../shared/types'
 import './panel.css'
 
 /**
@@ -26,13 +28,13 @@ function App(): React.JSX.Element {
   const [quota, setQuota] = useState<{ used: number; limit: number }>({ used: 0, limit: 5 })
 
   useEffect(() => {
-    const off = window.hearth.onEgressChanged(setEgress)
-    void window.hearth.getQuota().then(setQuota)
+    const off = window.uninvited.onEgressChanged(setEgress)
+    void window.uninvited.getQuota().then(setQuota)
     return off
   }, [])
 
   const refreshQuota = useCallback(async () => {
-    setQuota(await window.hearth.getQuota())
+    setQuota(await window.uninvited.getQuota())
   }, [])
 
   return (
@@ -41,7 +43,10 @@ function App(): React.JSX.Element {
         <div className="brand">
           <span className="logo" />
           <div>
-            <h1>Hearth 围炉</h1>
+            <h1>
+              不请自来
+              <small>Uninvited</small>
+            </h1>
             <p className="sub">文档与论文永远留在炉边，不出这台电脑</p>
           </div>
         </div>
@@ -118,10 +123,10 @@ function ConvertPane({
       for (let i = 0; i < files.length; i++) {
         setProgress(Math.round(((i + 0.3) / files.length) * 100))
         const file = files[i]
-        const path = window.hearth.getPathForFile(file)
+        const path = window.uninvited.getPathForFile(file)
         const dir =
           direction === 'auto' ? undefined : direction
-        const r = await window.hearth.convert(path, dir ?? (await window.hearth.inferDirection(path)) ?? 'word2pdf')
+        const r = await window.uninvited.convert(path, dir ?? (await window.uninvited.inferDirection(path)) ?? 'word2pdf')
         last = r
       }
       setProgress(100)
@@ -271,7 +276,7 @@ function ResultCard({ result }: { result: ConvertResult }): React.JSX.Element {
 function HistoryPane(): React.JSX.Element {
   const [items, setItems] = useState<HistoryEntry[]>([])
   useEffect(() => {
-    void window.hearth.getHistory().then(setItems)
+    void window.uninvited.getHistory().then(setItems)
   }, [])
 
   return (
@@ -281,7 +286,7 @@ function HistoryPane(): React.JSX.Element {
         <button
           className="btn small"
           onClick={async () => {
-            await window.hearth.clearHistory()
+            await window.uninvited.clearHistory()
             setItems([])
           }}
         >
@@ -327,13 +332,13 @@ function AssistantPane(): React.JSX.Element {
   const [llm, setLlm] = useState<{ ready: boolean; label: string; model: string } | null>(null)
 
   useEffect(() => {
-    void window.hearth.llmStatus().then(setLlm)
+    void window.uninvited.llmStatus().then(setLlm)
   }, [])
 
   const doLookup = useCallback(async () => {
     const w = word.trim()
     if (!w) return
-    setLookup(await window.hearth.lookup(w))
+    setLookup(await window.uninvited.lookup(w))
   }, [word])
 
   const ask = useCallback(async () => {
@@ -342,7 +347,7 @@ function AssistantPane(): React.JSX.Element {
     setBusy(true)
     setAnswer('')
     try {
-      setAnswer(await window.hearth.ask(q))
+      setAnswer(await window.uninvited.ask(q))
     } catch (e) {
       setAnswer(`问不了：${e instanceof Error ? e.message : String(e)}`)
     }
@@ -419,20 +424,33 @@ function AssistantPane(): React.JSX.Element {
 
 // ==== 设置 ====
 
+/** 形象缩略预览：用主题色画一个极简示意，比加载 Pixi 快得多 */
+function ThemeSwatch({ id }: { id: PetThemeId }): React.JSX.Element {
+  const t = THEME_LIST.find((x) => x.id === id)
+  if (!t) return <span className="swatch" />
+  const p = t.palette
+  return (
+    <span className="swatch" style={{ background: `#${p.body.toString(16).padStart(6, '0')}` }}>
+      <i style={{ background: `#${p.hair.toString(16).padStart(6, '0')}` }} />
+      <b style={{ background: `#${p.dark.toString(16).padStart(6, '0')}` }} />
+    </span>
+  )
+}
+
 function SettingsPane({ egress }: { egress: EgressStatus }): React.JSX.Element {
   const [s, setS] = useState<AppSettings | null>(null)
   const [persona, setPersona] = useState<Persona | null>(null)
   const [saved, setSaved] = useState(false)
 
   useEffect(() => {
-    void window.hearth.getSettings().then(setS)
-    void window.hearth.getPersona().then(setPersona)
+    void window.uninvited.getSettings().then(setS)
+    void window.uninvited.getPersona().then(setPersona)
   }, [])
 
   if (!s || !persona) return <div className="pane">载入中…</div>
 
   const patch = async (p: Partial<AppSettings>): Promise<void> => {
-    const next = await window.hearth.saveSettings(p)
+    const next = await window.uninvited.saveSettings(p)
     setS(next)
     setSaved(true)
     setTimeout(() => setSaved(false), 1600)
@@ -440,6 +458,25 @@ function SettingsPane({ egress }: { egress: EgressStatus }): React.JSX.Element {
 
   return (
     <div className="pane">
+      <section className="card">
+        <h2>桌宠形象</h2>
+        <p className="tip">形象随时可换，动画骨架不变。选中后桌宠立刻变换，无需重启。</p>
+        <div className="theme-grid">
+          {THEME_OPTIONS.map((t) => (
+            <button
+              key={t.id}
+              className={'theme-card' + (s.petTheme === t.id ? ' active' : '')}
+              onClick={() => void patch({ petTheme: t.id })}
+              title={t.desc}
+            >
+              <ThemeSwatch id={t.id} />
+              <strong>{t.name}</strong>
+              <em>{t.desc}</em>
+            </button>
+          ))}
+        </div>
+      </section>
+
       <section className="card">
         <h2>云端大脑</h2>
         <p className="tip">只发送对话与翻译的文本片段；文档与论文不出本机。</p>
@@ -496,7 +533,7 @@ function SettingsPane({ egress }: { egress: EgressStatus }): React.JSX.Element {
         </label>
         <label className="check">
           <input type="checkbox" checked={s.autoLaunch} onChange={(e) => {
-            void window.hearth.setAutoLaunch(e.target.checked)
+            void window.uninvited.setAutoLaunch(e.target.checked)
             void patch({ autoLaunch: e.target.checked })
           }} />
           <span>开机自启（延迟 30 秒，不拖慢开机）</span>
@@ -522,7 +559,7 @@ function SettingsPane({ egress }: { egress: EgressStatus }): React.JSX.Element {
             className="input"
             value={persona.name}
             onChange={(e) => setPersona({ ...persona, name: e.target.value })}
-            onBlur={() => void window.hearth.savePersona(persona)}
+            onBlur={() => void window.uninvited.savePersona(persona)}
           />
         </label>
         <label className="field">
@@ -532,7 +569,7 @@ function SettingsPane({ egress }: { egress: EgressStatus }): React.JSX.Element {
             rows={3}
             value={persona.description}
             onChange={(e) => setPersona({ ...persona, description: e.target.value })}
-            onBlur={() => void window.hearth.savePersona(persona)}
+            onBlur={() => void window.uninvited.savePersona(persona)}
           />
         </label>
         <label className="field">
@@ -541,7 +578,7 @@ function SettingsPane({ egress }: { egress: EgressStatus }): React.JSX.Element {
             className="input"
             value={persona.tone}
             onChange={(e) => setPersona({ ...persona, tone: e.target.value })}
-            onBlur={() => void window.hearth.savePersona(persona)}
+            onBlur={() => void window.uninvited.savePersona(persona)}
           />
         </label>
       </section>
@@ -576,7 +613,7 @@ function SettingsPane({ egress }: { egress: EgressStatus }): React.JSX.Element {
         <h2>数据</h2>
         <div className="row">
           <button className="btn" onClick={async () => {
-            const p = await window.hearth.exportData()
+            const p = await window.uninvited.exportData()
             alert(`已导出到：${p}`)
           }}>
             备份全部本地数据
@@ -585,7 +622,7 @@ function SettingsPane({ egress }: { egress: EgressStatus }): React.JSX.Element {
             className="btn danger"
             onClick={async () => {
               if (confirm('确定清空全部本地数据？人设、记忆与历史都会删除，且不可恢复。')) {
-                await window.hearth.wipeData()
+                await window.uninvited.wipeData()
                 alert('已清空。')
               }
             }}

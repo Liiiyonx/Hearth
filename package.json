@@ -1,9 +1,9 @@
 {
-  "name": "hearth",
+  "name": "uninvited",
   "version": "0.1.0",
-  "description": "Hearth（围炉）· 一个会转文档、会读论文的桌面小人",
+  "description": "不请自来 Uninvited —— 你没请它来，它自己来的桌面小人。文档与论文永远留在你的电脑里。",
   "main": "out/main/index.js",
-  "author": "Hearth",
+  "author": "Uninvited",
   "license": "MIT",
   "private": true,
   "scripts": {

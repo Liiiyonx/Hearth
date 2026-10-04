@@ -9,8 +9,8 @@ const { join } = require('node:path')
 
 /** @type {import('electron-builder').Configuration} */
 module.exports = {
-  appId: 'cn.hearth.desktop',
-  productName: 'Hearth',
+  appId: 'cn.uninvited.desktop',
+  productName: '不请自来',
   directories: {
     output: 'dist'
   },
@@ -28,7 +28,7 @@ module.exports = {
     allowToChangeInstallationDirectory: true,
     createDesktopShortcut: true,
     createStartMenuShortcut: true,
-    shortcutName: 'Hearth 围炉'
+    shortcutName: '不请自来 Uninvited'
   },
   /**
    * Electron 自带 55 个语言包约 41MB，本项目只面向中文用户。

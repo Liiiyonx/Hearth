@@ -25,12 +25,12 @@ function Bubble(): React.JSX.Element {
   const [egress, setEgress] = useState<EgressStatus | null>(null)
 
   useEffect(() => {
-    const offData = window.hearth.onBubbleData((payload: BubblePayload) => {
+    const offData = window.uninvited.onBubbleData((payload: BubblePayload) => {
       setData(payload)
       setDeep(null)
       setBusy(false)
     })
-    const offEgress = window.hearth.onEgressChanged((s) => {
+    const offEgress = window.uninvited.onEgressChanged((s) => {
       setEgress(s.state === 'idle' ? null : s)
     })
     return () => {
@@ -43,7 +43,7 @@ function Bubble(): React.JSX.Element {
     if (!data) return
     setBusy(true)
     try {
-      setDeep(await window.hearth.bubbleDeepExplain(data.word))
+      setDeep(await window.uninvited.bubbleDeepExplain(data.word))
     } catch (e) {
       setDeep({
         summary: '问不了云端',
@@ -55,11 +55,11 @@ function Bubble(): React.JSX.Element {
   }, [data])
 
   const close = useCallback(() => {
-    window.hearth.closeBubble()
+    window.uninvited.closeBubble()
   }, [])
 
   const openPanel = useCallback(() => {
-    window.hearth.openPanel()
+    window.uninvited.openPanel()
     close()
   }, [close])
 

@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState, useCallback } from 'react'
 import { createRoot } from 'react-dom/client'
 import { PetStage, type PetPose } from './stage'
 import { BehaviorEngine } from './behavior'
-import type { DroppedFile, EgressStatus } from '../../../shared/types'
+import type { DroppedFile, EgressStatus, PetThemeId } from '../../../shared/types'
 import './pet.css'
 
 /**
@@ -28,14 +28,14 @@ function PetApp(): React.JSX.Element {
   const handleFiles = useCallback(async (files: DroppedFile[]) => {
     const behavior = behaviorRef.current
     for (const f of files) {
-      const direction = await window.hearth.inferDirection(f.path)
+      const direction = await window.uninvited.inferDirection(f.path)
       if (!direction) continue
       setProgress({ show: true, pct: 40 })
-      const result = await window.hearth.convert(f.path, direction)
+      const result = await window.uninvited.convert(f.path, direction)
       setProgress({ show: true, pct: 100 })
       behavior?.poke()
       stageRef.current?.requestFastRender()
-      window.hearth.openPanel()
+      window.uninvited.openPanel()
       setTimeout(() => setProgress({ show: false, pct: 0 }), 900)
       if (!result.ok) console.warn('[pet] 转换失败', result.error)
     }
@@ -56,8 +56,18 @@ function PetApp(): React.JSX.Element {
     let disposed = false
 
     void (async () => {
+      // 先读设置里的形象主题，实现「打开就用上次选的形象」
+      let theme: PetThemeId = 'spider'
+      try {
+        const s = await window.uninvited.getSettings()
+        theme = s.petTheme ?? 'spider'
+      } catch {
+        /* 设置读不到就用默认形象 */
+      }
+
       try {
         await stage.init(canvas, 8)
+        stage.setTheme(theme)
       } catch (e) {
         // 初始化失败要让冒烟测试看得见，否则表现为「一片空白」无从排查
         console.error('[pet] PixiJS 初始化失败', e)
@@ -67,7 +77,13 @@ function PetApp(): React.JSX.Element {
       if (disposed) return
       ;(window as unknown as Record<string, unknown>).__petReady = true
       ;(window as unknown as Record<string, unknown>).__stage = stage
-      window.hearth.setPetPosition(behavior.x, behavior.y)
+      window.uninvited.setPetPosition(behavior.x, behavior.y)
+
+      // 面板里换了形象 → 这里立即重建，无需重启
+      window.uninvited.onThemeChanged((id) => {
+        stage.setTheme(id)
+        stage.requestFastRender()
+      })
 
       const loop = (): void => {
         const moved = behavior.tick()
@@ -79,7 +95,8 @@ function PetApp(): React.JSX.Element {
             Math.abs(behavior.x - lastSent.current.x) >= 1 ||
             Math.abs(behavior.y - lastSent.current.y) >= 1
           ) {
-            window.hearth.setPetPosition(behavior.x, behavior.y)
+            window.uninvited.setPetPosition(behavior.x, behavior.y)
+
             lastSent.current = { x: behavior.x, y: behavior.y }
           }
         }
@@ -88,27 +105,27 @@ function PetApp(): React.JSX.Element {
       requestAnimationFrame(loop)
     })()
 
-    const offFg = window.hearth.onForegroundWindow((win) => {
+    const offFg = window.uninvited.onForegroundWindow((win) => {
       behavior.onForegroundWindow(win)
       stage.requestFastRender()
     })
-    const offDestroyed = window.hearth.onWindowDestroyed((hwnd) => {
+    const offDestroyed = window.uninvited.onWindowDestroyed((hwnd) => {
       behavior.onWindowDestroyed(hwnd)
       stage.requestFastRender()
     })
-    const offUnsupported = window.hearth.onWin32Unsupported(() => {
+    const offUnsupported = window.uninvited.onWin32Unsupported(() => {
       // 退化为固定在右下角，不跟随窗口
       behavior.state = 'idle'
     })
-    const offEgress = window.hearth.onEgressChanged(setEgress)
-    const offShortcut = window.hearth.onScreenshotShortcut(() => {
+    const offEgress = window.uninvited.onEgressChanged(setEgress)
+    const offShortcut = window.uninvited.onScreenshotShortcut(() => {
       behavior.poke()
     })
-    const offDrop = window.hearth.onDropReceived((files) => {
+    const offDrop = window.uninvited.onDropReceived((files) => {
       void handleFiles(files)
     })
 
-    void window.hearth.getForeground().then((win) => {
+    void window.uninvited.getForeground().then((win) => {
       if (win) behavior.onForegroundWindow(win)
     })
 
@@ -168,7 +185,7 @@ function PetApp(): React.JSX.Element {
     c.lx += dx
     c.ly += dy
     b.dragTo(c.lx, c.ly)
-    window.hearth.setPetPosition(c.lx, c.ly)
+    window.uninvited.setPetPosition(c.lx, c.ly)
     lastSent.current = { x: c.lx, y: c.ly }
     stageRef.current?.requestFastRender()
   }, [])
@@ -187,7 +204,7 @@ function PetApp(): React.JSX.Element {
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
-      onDoubleClick={() => window.hearth.openPanel()}
+      onDoubleClick={() => window.uninvited.openPanel()}
     >
       {egress.state !== 'idle' && (
         <div className="pet-egress" title={`正在出网：${egress.detail}`}>
@@ -232,7 +249,7 @@ function collectDroppedFiles(e: DragEvent): DroppedFile[] {
     if (item.kind !== 'file') continue
     const file = item.getAsFile()
     if (!file) continue
-    out.push({ path: window.hearth.getPathForFile(file), name: file.name, size: file.size })
+    out.push({ path: window.uninvited.getPathForFile(file), name: file.name, size: file.size })
   }
   return out
 }

@@ -1,4 +1,5 @@
 import { Application, Container, Graphics, Sprite, Texture, Text } from 'pixi.js'
+import { getTheme, type ThemeId, type Palette } from './themes'
 
 /**
  * 桌宠舞台 —— PixiJS 2D 精灵动画（方案书表 2 选型）。
@@ -16,13 +17,6 @@ export type PetPose = 'idle' | 'perch' | 'falling' | 'walking' | 'sleeping' | 'p
 /** 一次交互后维持满帧的帧数——够看完一段动画即可 */
 const FAST_FRAME_BUDGET = 36
 
-/** 角色配色方案——相当于内置预设形象 */
-const PALETTES = {
-  hearth: { body: 0x0E8F6E, dark: 0x0B7A5E, belly: 0xD4EFE5, blush: 0xFFB4B4, hair: 0x3D4A47 },
-  dusk: { body: 0x228BE6, dark: 0x1B6FB8, belly: 0xEAF2FB, blush: 0xFFC4C4, hair: 0x2B3A47 },
-  ember: { body: 0xE8734A, dark: 0xC25A34, belly: 0xFFE8D6, blush: 0xFFC9B8, hair: 0x4A2F26 }
-}
-
 export class PetStage {
   app!: Application
   private root = new Container()
@@ -35,7 +29,9 @@ export class PetStage {
   private mouth!: Graphics
   private breathG!: Graphics
   private zzz!: Text
-  private palette = PALETTES.hearth
+  /** 当前形象主题 */
+  private themeId: ThemeId = 'hearth'
+  private palette: Palette = getTheme('hearth').palette
   private t = 0
   private pose: PetPose = 'idle'
   private facing: 1 | -1 = 1
@@ -83,34 +79,16 @@ export class PetStage {
   }
 
   private buildCharacter(): void {
-    const p = this.palette
+    const theme = getTheme(this.themeId)
+    const p = theme.palette
     this.bodyG = new Container()
 
-    // —— 身体：圆润的炉火小团子——
+    // —— 身体与头部由主题决定长什么样 ——
     const body = new Graphics()
-    // 主体
-    body.ellipse(0, 42, 42, 46).fill({ color: p.body })
-    // 肚皮浅色区
-    body.ellipse(0, 52, 27, 31).fill({ color: p.belly })
-    // 底部阴影
-    body.ellipse(0, 80, 36, 9).fill({ color: p.dark, alpha: 0.25 })
 
-    // —— 头——
     this.headG = new Container()
     const head = new Graphics()
-    head.circle(0, 0, 36).fill({ color: p.body })
-    // 头顶呆毛
-    head.moveTo(-2, -34)
-    head.quadraticCurveTo(6, -50, 15, -43)
-    head.quadraticCurveTo(7, -38, 1, -36)
-    head.fill({ color: p.dark })
-    // 刘海：沿头顶圆弧向内收的一段弧形，而不是切到圆心的扇形
-    head.moveTo(-33, -10)
-    head.quadraticCurveTo(-18, -30, 0, -31)
-    head.quadraticCurveTo(18, -30, 33, -10)
-    head.quadraticCurveTo(24, -22, 0, -22)
-    head.quadraticCurveTo(-24, -22, -33, -10)
-    head.fill({ color: p.hair, alpha: 0.9 })
+    theme.draw({ body, head, p, theme: this.themeId })
 
     // 眼睛（闭眼时用椭圆表示）
     this.eyeL = new Graphics()
@@ -153,10 +131,20 @@ export class PetStage {
     this.drawMouth('smile')
   }
 
-  /** 设置预设形象的配色 */
-  setPalette(name: keyof typeof PALETTES): void {
-    this.palette = PALETTES[name] ?? PALETTES.hearth
+  /**
+   * 切换桌宠形象。
+   * 形象是「可自定义」的：换主题 = 换绘制器 + 换调色板，
+   * 动画骨架、行为状态机、隐私逻辑全部复用。
+   */
+  setTheme(id: ThemeId): void {
+    if (id === this.themeId) return
+    this.themeId = id
+    this.palette = getTheme(id).palette
     this.destroyAndRebuild()
+  }
+
+  get currentTheme(): ThemeId {
+    return this.themeId
   }
 
   private destroyAndRebuild(): void {
@@ -206,29 +194,64 @@ export class PetStage {
     this.zzz.visible = pose === 'sleeping'
   }
 
+  /**
+   * 眼睛绘制。不同主题差异很大——普通小团子是圆眼，
+   * 而蒙面英雄是大号白色水滴眼（带深色描边），所以这里按主题分支。
+   */
   private drawEyes(kind: 'open' | 'closed' | 'happy' | 'shock'): void {
+    const p = this.palette
+    const masked = this.themeId === 'spider'
+    const ink = p.eye
+
     const draw = (g: Graphics, side: number): void => {
       g.clear()
-      const cx = side * 13
-      const cy = 2
+      const cx = side * (masked ? 12 : 13)
+      const cy = masked ? 1 : 2
+
+      if (masked) {
+        // 大号白色水滴眼：外深内亮，这是这类蒙面英雄角色的辨识特征
+        switch (kind) {
+          case 'open':
+          case 'shock': {
+            const r = kind === 'shock' ? 9.5 : 8.5
+            g.moveTo(cx, cy - r)
+            g.bezierCurveTo(cx + r * 0.95, cy - r * 0.2, cx + r * 0.8, cy + r * 0.9, cx, cy + r)
+            g.bezierCurveTo(cx - r * 0.8, cy + r * 0.9, cx - r * 0.95, cy - r * 0.2, cx, cy - r)
+            g.fill({ color: 0xf7faff })
+            g.stroke({ color: ink, width: 1.6 })
+            g.circle(cx, cy - r * 0.28, r * 0.3).fill({ color: 0xffffff, alpha: 0.75 })
+            break
+          }
+          case 'closed':
+          case 'happy': {
+            // 闭眼/笑眼：向下的弧线（蒙面时是标志性的「><」形笑眼）
+            g.moveTo(cx - 8, cy - 2)
+            g.quadraticCurveTo(cx, cy + (kind === 'happy' ? -6 : 5), cx + 8, cy - 2)
+            g.stroke({ color: ink, width: 2.4 })
+            break
+          }
+        }
+        return
+      }
+
       switch (kind) {
         case 'open':
-          g.ellipse(cx, cy, 5.5, 7).fill({ color: 0x2B3A3F })
-          g.circle(cx + 1.8, cy - 2.4, 1.8).fill({ color: 0xFFFFFF })
+          g.ellipse(cx, cy, 5.5, 7).fill({ color: ink })
+          g.circle(cx + 1.8, cy - 2.4, 1.8).fill({ color: 0xffffff })
           break
         case 'closed':
           g.moveTo(cx - 6, cy)
           g.quadraticCurveTo(cx, cy + 5, cx + 6, cy)
-          g.stroke({ color: 0x2B3A3F, width: 2.2 })
+          g.stroke({ color: ink, width: 2.2 })
           break
         case 'happy':
           g.moveTo(cx - 6, cy + 2)
           g.quadraticCurveTo(cx, cy - 5, cx + 6, cy + 2)
-          g.stroke({ color: 0x2B3A3F, width: 2.4 })
+          g.stroke({ color: ink, width: 2.4 })
           break
         case 'shock':
-          g.circle(cx, cy, 7).fill({ color: 0xFFFFFF })
-          g.circle(cx, cy, 4).fill({ color: 0x2B3A3F })
+          g.circle(cx, cy, 7).fill({ color: 0xffffff })
+          g.circle(cx, cy, 4).fill({ color: ink })
           break
       }
     }
@@ -400,4 +423,4 @@ export class PetStage {
   }
 }
 
-export { PALETTES }
+export { THEMES, THEME_LIST, getTheme } from './themes'

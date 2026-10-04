@@ -154,7 +154,12 @@ export interface AppSettings {
   enableSelectionLookup: boolean
   /** 全局快捷键：截图提问 */
   screenshotShortcut: string
+  /** 桌宠形象主题——形象可自定义，这里存的是主题 id */
+  petTheme: PetThemeId
 }
+
+/** 桌宠形象主题标识（与渲染进程 themes.ts 保持一致） */
+export type PetThemeId = 'hearth' | 'spider' | 'dusk' | 'ember' | 'mint'
 
 export const DEFAULT_SETTINGS: AppSettings = {
   provider: 'deepseek',
@@ -168,8 +173,18 @@ export const DEFAULT_SETTINGS: AppSettings = {
   idleFps: 8,
   dailyFreeQuota: 5,
   enableSelectionLookup: true,
-  screenshotShortcut: 'Alt+A'
+  screenshotShortcut: 'Alt+A',
+  petTheme: 'spider'
 }
+
+/** 形象主题的中文名与说明，供设置面板展示 */
+export const THEME_OPTIONS: { id: PetThemeId; name: string; desc: string }[] = [
+  { id: 'spider', name: '蛛网', desc: '原创卡通蜘蛛侠风格：红蓝配色、蛛网纹理、胸口蜘蛛徽记' },
+  { id: 'hearth', name: '围炉', desc: '最初的青绿色小团子' },
+  { id: 'dusk', name: '夜色', desc: '安静的深蓝' },
+  { id: 'ember', name: '暖阳', desc: '暖色调，适合白天' },
+  { id: 'mint', name: '薄荷', desc: '清爽的浅绿' }
+]
 
 /** 性能预算（方案书表 4，超标即修） */
 export const PERF_BUDGET = {

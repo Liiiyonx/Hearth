@@ -139,7 +139,7 @@ export async function deleteSession(id: string): Promise<void> {
 /** 导出全部本地数据（备份与迁移，方案书「可以备份、迁移、删除」） */
 export async function exportAll(): Promise<string> {
   const s = await load()
-  const out = path.join(app.getPath('desktop'), `hearth-backup-${Date.now()}.json`)
+  const out = path.join(app.getPath('desktop'), `uninvited-backup-${Date.now()}.json`)
   await fs.writeFile(out, JSON.stringify(s, null, 2), 'utf-8')
   return out
 }

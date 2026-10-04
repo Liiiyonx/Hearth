@@ -8,6 +8,7 @@ import type {
   ChatSession,
   EgressStatus,
   LookupResult,
+  PetThemeId,
   WindowInfo,
   DroppedFile
 } from '../shared/types'
@@ -31,6 +32,12 @@ const api = {
 
   // —— 划词与对话 ——
   lookup: (word: string) => ipcRenderer.invoke('dict:lookup', word),
+  // —— 桌宠形象 ——
+  onThemeChanged: (cb: (id: PetThemeId) => void) => {
+    const handler = (_e: unknown, id: PetThemeId) => cb(id)
+    ipcRenderer.on('pet:theme', handler)
+    return () => { ipcRenderer.removeListener('pet:theme', handler) }
+  },
   // —— 划词气泡 ——
   bubbleDeepExplain: (word: string) => ipcRenderer.invoke('bubble:deepExplain', word),
   closeBubble: (): void => ipcRenderer.send('bubble:close'),
@@ -120,6 +127,6 @@ const api = {
   platform: process.platform
 }
 
-export type HearthApi = typeof api
+export type UninvitedApi = typeof api
 
-contextBridge.exposeInMainWorld('hearth', api)
+contextBridge.exposeInMainWorld('uninvited', api)

@@ -42,7 +42,7 @@ export async function convertViaHtmlPrint(
   // 写临时 HTML
   const tmpHtml = path.join(
     os.tmpdir(),
-    'hearth-print-' + Date.now() + '-' + Math.random().toString(36).slice(2) + '.html'
+    'uninvited-print-' + Date.now() + '-' + Math.random().toString(36).slice(2) + '.html'
   )
   await fs.writeFile(tmpHtml, pageHtml, 'utf-8')
 

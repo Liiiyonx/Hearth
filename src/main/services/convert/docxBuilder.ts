@@ -35,7 +35,7 @@ export async function buildDocx(params: {
           right: { style: 'single', size: 6, color: 'E8B84B', space: 6 }
         },
         children: [
-          new TextRun({ text: 'Hearth 转换说明（可删除本段）', bold: true, size: 20, color: '8A6D1F' })
+          new TextRun({ text: '不请自来 转换说明（可删除本段）', bold: true, size: 20, color: '8A6D1F' })
         ]
       })
     )
@@ -79,7 +79,7 @@ export async function buildDocx(params: {
         const clean = text.replace(/^([•·\-\*▪◦‣]|\d+[\.、\)])\s+/, '')
         children.push(
           new Paragraph({
-            numbering: { reference: 'hearth-bullets', level: 0 },
+            numbering: { reference: 'uninvited-bullets', level: 0 },
             spacing: { after: 80 },
             children: [new TextRun({ text: clean })]
           })
@@ -155,7 +155,7 @@ export async function buildDocx(params: {
     numbering: {
       config: [
         {
-          reference: 'hearth-bullets',
+          reference: 'uninvited-bullets',
           levels: [
             {
               level: 0,
