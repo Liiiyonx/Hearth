@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>Hearth Pet</title>
+  <style>
+    html, body {
+      margin: 0; padding: 0;
+      width: 100%; height: 100%;
+      background: transparent;
+      overflow: hidden;
+      user-select: none;
+      -webkit-user-select: none;
+      cursor: grab;
+    }
+    body.dragging { cursor: grabbing; }
+    body.idle { cursor: default; }
+
+    /*
+     * 画布与交互层都用绝对定位铺满窗口。
+     * 若用普通流式布局，100% 高的 canvas 与 100% 高的交互层会各占一行，
+     * 总高变成 200%，画布会被挤到视口外——表现就是「一片空白」。
+     */
+    #stage {
+      position: absolute;
+      inset: 0;
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    #overlay {
+      position: absolute;
+      inset: 0;
+      /* 交互层不拦截画布上的指针事件，统一由 body 侧处理 */
+      pointer-events: none;
+    }
+
+    #progress {
+      position: absolute;
+      top: 8px; left: 50%;
+      transform: translateX(-50%);
+      width: 120px; height: 5px;
+      background: rgba(0,0,0,0.12);
+      border-radius: 3px;
+      overflow: hidden;
+      display: none;
+    }
+    #progress > i {
+      display: block; height: 100%; width: 0%;
+      background: linear-gradient(90deg, #12b886, #0e8f6e);
+      border-radius: 3px;
+      transition: width .2s ease;
+    }
+
+    #hint {
+      position: absolute;
+      bottom: 2px; left: 50%;
+      transform: translateX(-50%);
+      font: 10px/1.4 'Microsoft YaHei', sans-serif;
+      color: #4b6b63;
+      background: rgba(255,255,255,0.86);
+      padding: 2px 8px;
+      border-radius: 10px;
+      white-space: nowrap;
+      opacity: 0;
+      transition: opacity .18s;
+    }
+    body:hover #hint { opacity: 1; }
+  </style>
+</head>
+<body>
+  <canvas id="stage"></canvas>
+  <div id="overlay"></div>
+  <div id="hint">拖拽移动 · 双击打开面板 · 文件拖到我身上转换</div>
+  <script type="module" src="./src/pet/main.tsx"></script>
+</body>
+</html>

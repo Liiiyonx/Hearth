@@ -1,0 +1,11 @@
+node_modules/
+out/
+dist/
+.regression/
+.regression-out/
+.nodecheck/
+*.log
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

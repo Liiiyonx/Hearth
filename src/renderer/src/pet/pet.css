@@ -1,0 +1,99 @@
+/* 桌宠窗口样式——透明背景，只有必要的 UI 浮层 */
+
+body {
+  margin: 0;
+  background: transparent;
+  overflow: hidden;
+  font-family: 'Microsoft YaHei', 'PingFang SC', system-ui, sans-serif;
+}
+
+#stage {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+body.dragging {
+  cursor: grabbing;
+}
+
+/* 出网提示：隐私状态灯在桌宠侧的轻量呈现 */
+.pet-egress {
+  position: absolute;
+  top: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 210px;
+  padding: 3px 9px;
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid #f0d9a8;
+  color: #8a6d1f;
+  font-size: 10.5px;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+
+.pet-egress .dot {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #faad14;
+  animation: pet-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes pet-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(0.8); }
+}
+
+#progress {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 120px;
+  height: 5px;
+  background: rgba(0, 0, 0, 0.12);
+  border-radius: 3px;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+#progress > i {
+  display: block;
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #12b886, #0e8f6e);
+  border-radius: 3px;
+  transition: width 0.2s ease;
+}
+
+#hint {
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 10px;
+  line-height: 1.4;
+  color: #4b6b63;
+  background: rgba(255, 255, 255, 0.86);
+  padding: 2px 8px;
+  border-radius: 10px;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.18s;
+  pointer-events: none;
+}
+
+body:hover #hint {
+  opacity: 1;
+}
