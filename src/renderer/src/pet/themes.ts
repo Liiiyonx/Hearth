@@ -72,19 +72,6 @@ function webTexture(g: import('pixi.js').Graphics, color: number, alpha = 0.22):
   g.stroke({ color, width: 0.7, alpha })
 }
 
-/** 在头上叠蛛网状分割线 */
-function webMask(g: import('pixi.js').Graphics, color: number, alpha = 0.3): void {
-  for (let i = -2; i <= 2; i++) {
-    g.moveTo(i * 15, -34)
-    g.lineTo(i * 4, -6)
-  }
-  for (let ring = 12; ring <= 34; ring += 11) {
-    g.moveTo(-ring, -4)
-    g.arc(0, -4, ring, Math.PI, Math.PI * 2)
-  }
-  g.stroke({ color, width: 0.8, alpha })
-}
-
 /**
  * 胸口蜘蛛徽记。
  * 带一圈深色描边，否则浅色徽记压在红底上会糊掉。
@@ -146,37 +133,59 @@ function drawHearth({ body, head, p }: DrawCtx): void {
 /**
  * 卡通蜘蛛侠风格（原创演绎）。
  *
- * 造型要点：红蓝分区、蛛网纹理、胸口蜘蛛徽记、头套网纹分割线、
- * 大号白色水滴眼——都是这类英雄角色的通用视觉语言。
+ * 造型依据（参考 Q 版角色画法通行的几条规范）：
+ *  1. **头身比 1:2**——头占全身高度的一半，这是「一眼可爱」的关键；
+ *  2. **省略颈部**，头直接坐在肩上；
+ *  3. **眼睛又大又靠下**，占头部高度约三分之一，这是 Q 版的辨识特征；
+ *  4. 躯干画成bean/ 团子形，重量集中在下半部，没有真实肌肉线条；
+ *  5. 配色只用红 + 蓝两色，网格纹是识别符号。
+ *
+ * 另有一条实践提醒：**头套上的网纹不能画多、画乱**，否则整张脸糊掉。
+ * 所以这里只在头部画三根分割线 + 两道弧，其余留白。
  */
 function drawSpider({ body, head, p }: DrawCtx): void {
-  // —— 身体：红蓝分区 ——
-  body.ellipse(0, 42, 42, 46).fill({ color: p.body })
-  // 下半身与侧腰用深蓝，形成经典红蓝拼色
-  body.ellipse(0, 62, 38, 28).fill({ color: p.dark })
-  // 头套延续到身体上缘
-  body.ellipse(0, 20, 40, 18).fill({ color: p.hair })
-  // 蛛网纹理（压到红蓝交界之下，不喧宾夺主）
-  webTexture(body, p.belly, 0.17)
-  // 胸口徽记：深色圆底衬托，保证小尺寸下也看得清
-  body.circle(0, 36, 13).fill({ color: p.dark, alpha: 0.55 })
-  body.circle(0, 36, 13).stroke({ color: p.belly, width: 1.2, alpha: 0.6 })
-  // 徽记直接按放大的坐标画：在 Graphics 上做 scale/position 变换
-  // 会连带影响此前已绘制的所有形状，得不偿失。
-  spiderEmblemAt(body, p.belly, p.dark, 0, 36, 1.15)
-  // 底部阴影
-  body.ellipse(0, 80, 36, 9).fill({ color: 0x000000, alpha: 0.22 })
+  // —— 身体：bean形，重量偏下——
+  // 先画一圈深色底当描边：桌宠是透明窗口，浅色背景下没有描边会糊掉
+  body.ellipse(0, 44, 42, 46).fill({ color: 0x141c30, alpha: 0.28 })
+  body.ellipse(0, 44, 40, 44).fill({ color: p.body })
+  // 下半身深蓝：经典红蓝拼色
+  body.ellipse(0, 64, 36, 26).fill({ color: p.dark })
+  // 头套延伸到肩上（省略颈部，让头直接压在身上）
+  body.ellipse(0, 20, 38, 17).fill({ color: p.hair })
 
-  // —— 头：全红头套 + 网纹 ——
-  head.circle(0, 0, 36).fill({ color: p.hair })
-  webMask(head, p.dark, 0.26)
+  // 蛛网纹理：只在下半身与红色区交界处轻扫，不铺满
+  webTexture(body, p.belly, 0.2)
+
+  // 胸口蜘蛛徽记：深色圆底衬托，位置在红色区内
+  body.circle(0, 30, 14).fill({ color: 0x0a1a3a, alpha: 0.55 })
+  body.circle(0, 30, 14).stroke({ color: p.belly, width: 1.2, alpha: 0.6 })
+  spiderEmblemAt(body, p.belly, 0x0a1a3a, 0, 30, 1.15)
+
+  // 底部阴影
+  body.ellipse(0, 82, 34, 8).fill({ color: 0x000000, alpha: 0.2 })
+
+  // —— 头：正圆，占全身约一半——
+  head.circle(0, 0, 36).fill({ color: 0x141c30, alpha: 0.28 })
+  head.circle(0, 0, 34).fill({ color: p.hair })
+
+  // 头套网纹：仅三根分割线 + 两道弧，点到为止
+  for (const a of [-0.85, 0, 0.85]) {
+    head.moveTo(Math.sin(a) * 33, -Math.cos(a) * 33)
+    head.lineTo(Math.sin(a) * 13, -Math.cos(a) * 13)
+  }
+  head.moveTo(-26, -22)
+  head.arc(0, 0, 26, Math.PI * 1.18, Math.PI * 1.82)
+  head.moveTo(-15, -29)
+  head.arc(0, 0, 15, Math.PI * 1.2, Math.PI * 1.8)
+  head.stroke({ color: 0x7a1210, width: 1.2, alpha: 0.5 })
+
   // 头顶两根天线
-  head.moveTo(-6, -33)
-  head.quadraticCurveTo(-12, -47, -4, -45)
-  head.stroke({ color: p.dark, width: 1.6 })
-  head.moveTo(6, -33)
-  head.quadraticCurveTo(12, -47, 4, -45)
-  head.stroke({ color: p.dark, width: 1.6 })
+  head.moveTo(-7, -31)
+  head.quadraticCurveTo(-14, -44, -5, -42)
+  head.stroke({ color: p.dark, width: 1.7 })
+  head.moveTo(7, -31)
+  head.quadraticCurveTo(14, -44, 5, -42)
+  head.stroke({ color: p.dark, width: 1.7 })
 }
 
 /** 夜色蓝 */

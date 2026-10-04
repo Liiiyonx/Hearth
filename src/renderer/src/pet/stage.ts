@@ -205,21 +205,24 @@ export class PetStage {
 
     const draw = (g: Graphics, side: number): void => {
       g.clear()
-      const cx = side * (masked ? 12 : 13)
-      const cy = masked ? 1 : 2
+      // Q 版规范：眼睛大且位置偏低
+      const cx = side * (masked ? 11.5 : 13)
+      const cy = masked ? 5 : 2
 
       if (masked) {
         // 大号白色水滴眼：外深内亮，这是这类蒙面英雄角色的辨识特征
         switch (kind) {
           case 'open':
           case 'shock': {
-            const r = kind === 'shock' ? 9.5 : 8.5
+            const r = kind === 'shock' ? 12.5 : 11.5
             g.moveTo(cx, cy - r)
             g.bezierCurveTo(cx + r * 0.95, cy - r * 0.2, cx + r * 0.8, cy + r * 0.9, cx, cy + r)
             g.bezierCurveTo(cx - r * 0.8, cy + r * 0.9, cx - r * 0.95, cy - r * 0.2, cx, cy - r)
             g.fill({ color: 0xf7faff })
             g.stroke({ color: ink, width: 1.6 })
-            g.circle(cx, cy - r * 0.28, r * 0.3).fill({ color: 0xffffff, alpha: 0.75 })
+            // 双高光：这是「有神」的关键，大瞳孔配一点亮立刻灵动
+            g.circle(cx + r * 0.22, cy - r * 0.34, r * 0.26).fill({ color: 0xffffff })
+            g.circle(cx - r * 0.3, cy + r * 0.28, r * 0.13).fill({ color: 0xffffff, alpha: 0.7 })
             break
           }
           case 'closed':
