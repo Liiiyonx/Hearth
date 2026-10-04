@@ -97,25 +97,97 @@ function spiderEmblemAt(
   g.circle(X(0), Y(-6.4), S(1.9)).fill({ color })
 }
 
+// ==== 立体感辅助 ====
+//
+// 平涂色块看起来廉价，是"程序化绘制"最明显的短板。
+// 下面几个函数用**同心内缩的多层椭圆**模拟赛璐璐明暗：
+// 每层向内偏移并降低不透明度，视觉上就是从亮到暗的过渡。
+// 比纯平涂多花一点绘制量，但静态图只在重建时画一次，运行时零成本。
+
+/**
+ * 给一个圆形/椭圆形体做三段式明暗。
+ * 左上亮、右下暗，是最经典的受光关系。
+ */
+function shadeSphere(
+  g: import('pixi.js').Graphics,
+  cx: number,
+  cy: number,
+  rx: number,
+  ry: number,
+  base: number,
+  light: number,
+  dark: number
+): void {
+  g.ellipse(cx, cy, rx, ry).fill({ color: base })
+  // 亮部：左上
+  g.ellipse(cx - rx * 0.28, cy - ry * 0.32, rx * 0.62, ry * 0.55).fill({ color: light, alpha: 0.55 })
+  // 亮部里的高光点
+  g.ellipse(cx - rx * 0.36, cy - ry * 0.4, rx * 0.3, ry * 0.24).fill({ color: 0xffffff, alpha: 0.3 })
+  // 暗部：右下
+  g.ellipse(cx + rx * 0.3, cy + ry * 0.42, rx * 0.72, ry * 0.6).fill({ color: dark, alpha: 0.28 })
+  // 底部反光（地面弹上来的光），让形体不显死板
+  g.ellipse(cx, cy + ry * 0.72, rx * 0.5, ry * 0.2).fill({ color: light, alpha: 0.18 })
+}
+
+/** 把颜色调亮若干档 */
+function lighten(color: number, amount: number): number {
+  let r = (color >> 16) & 0xff
+  let g = (color >> 8) & 0xff
+  let b = color & 0xff
+  r = Math.min(255, Math.round(r + (255 - r) * amount))
+  g = Math.min(255, Math.round(g + (255 - g) * amount))
+  b = Math.min(255, Math.round(b + (255 - b) * amount))
+  return (r << 16) | (g << 8) | b
+}
+
+/** 把颜色调暗若干档 */
+function darken(color: number, amount: number): number {
+  let r = (color >> 16) & 0xff
+  let g = (color >> 8) & 0xff
+  let b = color & 0xff
+  r = Math.max(0, Math.round(r * (1 - amount)))
+  g = Math.max(0, Math.round(g * (1 - amount)))
+  b = Math.max(0, Math.round(b * (1 - amount)))
+  return (r << 16) | (g << 8) | b
+}
+
 // ==== 各主题的绘制器 ====
 
-/** 原始「围炉」小团子 */
+/**
+ * 「围炉」小团子——柔和的圆润体，带明暗与高光。
+ */
 function drawHearth({ body, head, p }: DrawCtx): void {
-  body.ellipse(0, 42, 42, 46).fill({ color: p.body })
-  body.ellipse(0, 52, 27, 31).fill({ color: p.belly })
-  body.ellipse(0, 80, 36, 9).fill({ color: p.dark, alpha: 0.25 })
+  const light = lighten(p.body, 0.26)
+  const dark = darken(p.body, 0.3)
 
-  head.circle(0, 0, 36).fill({ color: p.body })
-  head.moveTo(-2, -34)
-  head.quadraticCurveTo(6, -50, 15, -43)
-  head.quadraticCurveTo(7, -38, 1, -36)
-  head.fill({ color: p.dark })
+  // 身体：bean 形，重量偏下
+  shadeSphere(body, 0, 42, 42, 46, p.body, light, dark)
+  // 肚皮浅色区，也给一层暗部收边
+  body.ellipse(0, 52, 27, 31).fill({ color: p.belly })
+  body.ellipse(2, 60, 24, 24).fill({ color: darken(p.belly, 0.12), alpha: 0.5 })
+  body.ellipse(-7, 43, 12, 10).fill({ color: 0xffffff, alpha: 0.32 })
+  // 底部反光与接触阴影
+  body.ellipse(0, 80, 34, 8).fill({ color: 0x000000, alpha: 0.16 })
+  body.ellipse(0, 78, 26, 5).fill({ color: light, alpha: 0.22 })
+
+  // 头：正圆
+  shadeSphere(head, 0, 0, 36, 36, p.body, light, dark)
+  // 刘海
   head.moveTo(-33, -10)
   head.quadraticCurveTo(-18, -30, 0, -31)
   head.quadraticCurveTo(18, -30, 33, -10)
   head.quadraticCurveTo(24, -22, 0, -22)
   head.quadraticCurveTo(-24, -22, -33, -10)
-  head.fill({ color: p.hair, alpha: 0.9 })
+  head.fill({ color: p.hair, alpha: 0.92 })
+  // 刘海高光
+  head.ellipse(-12, -26, 13, 5).fill({ color: lighten(p.hair, 0.4), alpha: 0.45 })
+  // 呆毛
+  head.moveTo(-2, -34)
+  head.quadraticCurveTo(6, -50, 15, -43)
+  head.quadraticCurveTo(7, -38, 1, -36)
+  head.fill({ color: p.hair })
+  // 下巴暗面，把头和身体分开
+  head.ellipse(0, 20, 26, 12).fill({ color: dark, alpha: 0.22 })
 }
 
 /**
@@ -202,52 +274,75 @@ function drawSpider({ body, head, p }: DrawCtx): void {
   head.stroke({ color: p.dark, width: 1.7 })
 }
 
-/** 夜色蓝 */
+/** 夜色蓝——安静的深蓝，夜里不刺眼 */
 function drawDusk({ body, head, p }: DrawCtx): void {
-  body.ellipse(0, 42, 42, 46).fill({ color: p.body })
-  body.ellipse(0, 54, 25, 28).fill({ color: p.belly, alpha: 0.9 })
-  body.ellipse(0, 80, 36, 9).fill({ color: p.dark, alpha: 0.25 })
+  const light = lighten(p.body, 0.3)
+  const dark = darken(p.body, 0.32)
 
-  head.circle(0, 0, 36).fill({ color: p.body })
+  shadeSphere(body, 0, 42, 42, 46, p.body, light, dark)
+  body.ellipse(0, 54, 25, 28).fill({ color: p.belly, alpha: 0.92 })
+  body.ellipse(2, 62, 21, 19).fill({ color: darken(p.belly, 0.14), alpha: 0.45 })
+  body.ellipse(-8, 42, 13, 10).fill({ color: 0xffffff, alpha: 0.26 })
+  body.ellipse(0, 80, 34, 8).fill({ color: 0x000000, alpha: 0.18 })
+
+  shadeSphere(head, 0, 0, 36, 36, p.body, light, dark)
+  // 夜色的刘海：偏冷调深蓝
   head.moveTo(-34, -6)
   head.quadraticCurveTo(-20, -32, 0, -33)
   head.quadraticCurveTo(20, -32, 34, -6)
   head.quadraticCurveTo(18, -20, 0, -20)
   head.quadraticCurveTo(-18, -20, -34, -6)
-  head.fill({ color: p.hair, alpha: 0.92 })
+  head.fill({ color: p.hair, alpha: 0.94 })
+  head.ellipse(-12, -25, 14, 5).fill({ color: lighten(p.hair, 0.45), alpha: 0.4 })
+  head.ellipse(0, 20, 26, 12).fill({ color: dark, alpha: 0.24 })
 }
 
-/** 暖橙 */
+/** 暖阳——暖色调，适合白天 */
 function drawEmber({ body, head, p }: DrawCtx): void {
-  body.ellipse(0, 42, 42, 46).fill({ color: p.body })
-  body.ellipse(0, 52, 28, 32).fill({ color: p.belly, alpha: 0.92 })
-  body.ellipse(0, 80, 36, 9).fill({ color: p.dark, alpha: 0.25 })
+  const light = lighten(p.body, 0.28)
+  const dark = darken(p.body, 0.3)
 
-  head.circle(0, 0, 36).fill({ color: p.body })
+  shadeSphere(body, 0, 42, 42, 46, p.body, light, dark)
+  body.ellipse(0, 52, 28, 32).fill({ color: p.belly, alpha: 0.94 })
+  body.ellipse(2, 60, 24, 24).fill({ color: darken(p.belly, 0.13), alpha: 0.42 })
+  body.ellipse(-7, 42, 13, 11).fill({ color: 0xffffff, alpha: 0.34 })
+  body.ellipse(0, 80, 34, 8).fill({ color: 0x000000, alpha: 0.17 })
+
+  shadeSphere(head, 0, 0, 36, 36, p.body, light, dark)
   head.moveTo(-33, -8)
   head.quadraticCurveTo(-16, -33, 2, -32)
   head.quadraticCurveTo(20, -31, 33, -8)
   head.quadraticCurveTo(22, -20, 0, -20)
   head.quadraticCurveTo(-22, -20, -33, -8)
-  head.fill({ color: p.hair, alpha: 0.9 })
+  head.fill({ color: p.hair, alpha: 0.92 })
+  head.ellipse(-12, -25, 14, 5).fill({ color: lighten(p.hair, 0.42), alpha: 0.42 })
+  head.ellipse(0, 20, 26, 12).fill({ color: dark, alpha: 0.22 })
 }
 
-/** 薄荷绿 */
+/** 薄荷——清爽的浅绿 */
 function drawMint({ body, head, p }: DrawCtx): void {
-  body.ellipse(0, 42, 42, 46).fill({ color: p.body })
-  body.ellipse(0, 52, 27, 31).fill({ color: p.belly, alpha: 0.88 })
-  body.ellipse(0, 80, 36, 9).fill({ color: p.dark, alpha: 0.25 })
+  const light = lighten(p.body, 0.3)
+  const dark = darken(p.body, 0.28)
 
-  head.circle(0, 0, 36).fill({ color: p.body })
+  shadeSphere(body, 0, 42, 42, 46, p.body, light, dark)
+  body.ellipse(0, 52, 27, 31).fill({ color: p.belly, alpha: 0.9 })
+  body.ellipse(2, 60, 23, 23).fill({ color: darken(p.belly, 0.12), alpha: 0.44 })
+  body.ellipse(-8, 42, 13, 11).fill({ color: 0xffffff, alpha: 0.34 })
+  body.ellipse(0, 80, 34, 8).fill({ color: 0x000000, alpha: 0.15 })
+
+  shadeSphere(head, 0, 0, 36, 36, p.body, light, dark)
   // 圆润刘海
   head.moveTo(-33, -9)
   head.quadraticCurveTo(-20, -31, 0, -32)
   head.quadraticCurveTo(20, -31, 33, -9)
   head.quadraticCurveTo(20, -22, 0, -22)
   head.quadraticCurveTo(-20, -22, -33, -9)
-  head.fill({ color: p.hair, alpha: 0.9 })
+  head.fill({ color: p.hair, alpha: 0.92 })
+  head.ellipse(-12, -25, 14, 5).fill({ color: lighten(p.hair, 0.45), alpha: 0.42 })
   // 小发夹
-  head.roundRect(14, -28, 10, 4, 2).fill({ color: p.blush, alpha: 0.9 })
+  head.roundRect(14, -28, 11, 4.5, 2.2).fill({ color: p.blush })
+  head.roundRect(15.5, -29.5, 5, 2, 1).fill({ color: 0xffffff, alpha: 0.55 })
+  head.ellipse(0, 20, 26, 12).fill({ color: dark, alpha: 0.2 })
 }
 
 // ==== 主题表 ====
@@ -281,7 +376,7 @@ export const THEMES: Record<ThemeId, ThemeDef> = {
     },
     draw: drawSpider,
     // 立绘模式：真正的角色美术，而非几何拼色
-    art: { src: new URL('../../assets/pet-spider.png', import.meta.url).href, height: 186 }
+    art: { src: new URL('../../assets/pet-spider.png', import.meta.url).href, height: 208 }
   },
   dusk: {
     id: 'dusk',

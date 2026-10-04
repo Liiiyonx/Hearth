@@ -338,8 +338,9 @@ export async function clearCustomArt(): Promise<void> {
  * 按图片宽高比算：太宽的图压低高度，避免超出窗口。
  */
 export function displayHeightFor(width: number, height: number): number {
+  // 与内置立绘一致用 208 为基准，按宽高比略作调整
   const ratio = width / height
-  if (ratio > 1.2) return 150 // 很宽
-  if (ratio > 0.95) return 170 // 略宽
-  return 186 // 常规竖版
+  if (ratio > 1.2) return 168 // 很宽，压低避免超出窗口
+  if (ratio > 0.95) return 192 // 略宽
+  return 208 // 常规竖版
 }

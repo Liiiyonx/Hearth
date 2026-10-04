@@ -319,6 +319,16 @@ export class PetStage {
     const p = this.palette
     const masked = this.themeId === 'spider'
     const ink = p.eye
+    // 眼球底部的亮色：让圆眼不只是个黑豆子
+    const lightenInk = (() => {
+      let r = (ink >> 16) & 0xff
+      let g = (ink >> 8) & 0xff
+      let b = ink & 0xff
+      r = Math.min(255, Math.round(r + (255 - r) * 0.45))
+      g = Math.min(255, Math.round(g + (255 - g) * 0.45))
+      b = Math.min(255, Math.round(b + (255 - b) * 0.45))
+      return (r << 16) | (g << 8) | b
+    })()
 
     const draw = (g: Graphics, side: number): void => {
       g.clear()
@@ -354,25 +364,44 @@ export class PetStage {
         return
       }
 
+      // 普通小团子：圆眼。Q 版规范里眼睛要占脸相当比例，
+      // 所以比直觉画得大一些，并给渐变与双高光才显得有神。
       switch (kind) {
-        case 'open':
-          g.ellipse(cx, cy, 5.5, 7).fill({ color: ink })
-          g.circle(cx + 1.8, cy - 2.4, 1.8).fill({ color: 0xffffff })
+        case 'open': {
+          const rx = 7.2
+          const ry = 8.8
+          g.ellipse(cx, cy, rx, ry).fill({ color: ink })
+          // 虹膜底部略亮，模拟眼球受光
+          g.ellipse(cx, cy + ry * 0.32, rx * 0.72, ry * 0.4).fill({
+            color: lightenInk,
+            alpha: 0.55
+          })
+          // 双高光
+          g.circle(cx + rx * 0.32, cy - ry * 0.34, rx * 0.32).fill({ color: 0xffffff })
+          g.circle(cx - rx * 0.3, cy + ry * 0.3, rx * 0.15).fill({
+            color: 0xffffff,
+            alpha: 0.7
+          })
           break
+        }
         case 'closed':
-          g.moveTo(cx - 6, cy)
-          g.quadraticCurveTo(cx, cy + 5, cx + 6, cy)
-          g.stroke({ color: ink, width: 2.2 })
-          break
-        case 'happy':
-          g.moveTo(cx - 6, cy + 2)
-          g.quadraticCurveTo(cx, cy - 5, cx + 6, cy + 2)
+          g.moveTo(cx - 7, cy)
+          g.quadraticCurveTo(cx, cy + 6, cx + 7, cy)
           g.stroke({ color: ink, width: 2.4 })
           break
-        case 'shock':
-          g.circle(cx, cy, 7).fill({ color: 0xffffff })
-          g.circle(cx, cy, 4).fill({ color: ink })
+        case 'happy':
+          g.moveTo(cx - 7, cy + 2)
+          g.quadraticCurveTo(cx, cy - 6, cx + 7, cy + 2)
+          g.stroke({ color: ink, width: 2.6 })
           break
+        case 'shock': {
+          const r = 8.5
+          g.circle(cx, cy, r).fill({ color: 0xffffff })
+          g.circle(cx, cy, r * 0.95).stroke({ color: ink, width: 1.4 })
+          g.circle(cx, cy, r * 0.55).fill({ color: ink })
+          g.circle(cx + 2, cy - 2.4, r * 0.22).fill({ color: 0xffffff })
+          break
+        }
       }
     }
     draw(this.eyeL, -1)
