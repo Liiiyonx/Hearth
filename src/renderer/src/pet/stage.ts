@@ -61,9 +61,10 @@ export class PetStage {
       antialias: true,
       autoDensity: true,
       resolution: window.devicePixelRatio || 1,
-      // 不要用 low-power：它会让部分驱动跳过呈现，表现为窗口全透明。
-      // 空闲降帧改用 ticker.maxFPS 控制，更可控。
-      powerPreference: 'default'
+      // PixiJS 只认low-power / high-performance 两种。
+      // 不能用 low-power：它会让部分驱动跳过呈现，窗口表现为全透明。
+      // 空闲降帧由ticker.maxFPS 控制，与这个选项无关。
+      powerPreference: 'high-performance'
     })
     this.app.stage.addChild(this.root)
     this.buildCharacter()
