@@ -345,6 +345,18 @@ function drawMint({ body, head, p }: DrawCtx): void {
   head.ellipse(0, 20, 26, 12).fill({ color: dark, alpha: 0.2 })
 }
 
+/**
+ * 主题立绘的统一入口。
+ *
+ * ⚠️ 这里必须**逐个字面量**写路径，不能用模板字面量拼。
+ * Vite 靠静态分析收集资源，`new URL(\`...\${id}.png\`)` 它解析不出来，
+ * 结果是资源不被打进产物、运行时报错。
+ *
+ * 立绘比程序化绘制好看得多，因此内置主题优先用立绘；
+ * 加载失败会自动退回程序化形象（见 PetStage.maybeLoadArt），不会开天窗。
+ */
+const ART_HEIGHT = 208
+
 // ==== 主题表 ====
 
 export const THEMES: Record<ThemeId, ThemeDef> = {
@@ -360,7 +372,11 @@ export const THEMES: Record<ThemeId, ThemeDef> = {
       hair: 0x3d4a47,
       eye: 0x1f2a28
     },
-    draw: drawHearth
+    draw: drawHearth,
+    art: {
+      src: new URL('../../assets/pet-hearth.png', import.meta.url).href,
+      height: ART_HEIGHT
+    }
   },
   spider: {
     id: 'spider',
@@ -376,7 +392,10 @@ export const THEMES: Record<ThemeId, ThemeDef> = {
     },
     draw: drawSpider,
     // 立绘模式：真正的角色美术，而非几何拼色
-    art: { src: new URL('../../assets/pet-spider.png', import.meta.url).href, height: 208 }
+    art: {
+      src: new URL('../../assets/pet-spider.png', import.meta.url).href,
+      height: ART_HEIGHT
+    }
   },
   dusk: {
     id: 'dusk',
@@ -390,7 +409,11 @@ export const THEMES: Record<ThemeId, ThemeDef> = {
       hair: 0x2b3a47,
       eye: 0x16222e
     },
-    draw: drawDusk
+    draw: drawDusk,
+    art: {
+      src: new URL('../../assets/pet-dusk.png', import.meta.url).href,
+      height: ART_HEIGHT
+    }
   },
   ember: {
     id: 'ember',
@@ -404,7 +427,11 @@ export const THEMES: Record<ThemeId, ThemeDef> = {
       hair: 0x4a2f26,
       eye: 0x2a1a14
     },
-    draw: drawEmber
+    draw: drawEmber,
+    art: {
+      src: new URL('../../assets/pet-ember.png', import.meta.url).href,
+      height: ART_HEIGHT
+    }
   },
   // 自定义形象：art 由主进程在运行时注入（用户上传后才存在）
   custom: {
@@ -420,6 +447,8 @@ export const THEMES: Record<ThemeId, ThemeDef> = {
       eye: 0x1f2a28
     },
     draw: drawHearth
+    // custom 的 art 由主进程在用户上传后注入（见 PetStage.setCustomArt），
+    // 这里不能预设成某个内置主题的立绘
   },
 
   mint: {
@@ -434,7 +463,11 @@ export const THEMES: Record<ThemeId, ThemeDef> = {
       hair: 0x2f6b5c,
       eye: 0x1c3a34
     },
-    draw: drawMint
+    draw: drawMint,
+    art: {
+      src: new URL('../../assets/pet-mint.png', import.meta.url).href,
+      height: ART_HEIGHT
+    }
   }
 }
 

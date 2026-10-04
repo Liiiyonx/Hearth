@@ -140,10 +140,15 @@ export async function runSmoke(): Promise<void> {
   // 逐个主题切换并截图，核验每个形象都真的画出来了
   const themeIds = ['spider', 'hearth', 'dusk', 'ember', 'mint']
   for (const tid of themeIds) {
-    const r = await pet.webContents.executeJavaScript(`(() => {
+    const r = await pet.webContents.executeJavaScript(`(async () => {
       const st = window.__stage
       if (!st) return { ok: false }
       st.setTheme(${JSON.stringify(tid)})
+      // 等立绘异步加载完成
+      for (let i = 0; i < 40; i++) {
+        if (st.usesArt) break
+        await new Promise(r => setTimeout(r, 50))
+      }
       st.requestFastRender()
       st.app.render()
       const c = document.getElementById('stage')
@@ -152,9 +157,13 @@ export async function runSmoke(): Promise<void> {
       gl.readPixels(0, 0, c.width, c.height, gl.RGBA, gl.UNSIGNED_BYTE, buf)
       let opaque = 0
       for (let i = 3; i < buf.length; i += 4) if (buf[i] > 8) opaque++
-      return { ok: opaque > 200, opaque, theme: st.currentTheme }
+      return { ok: opaque > 200, opaque, theme: st.currentTheme, art: st.usesArt }
     })()`)
-    check(`主题「${tid}」已绘制`, r.ok === true, `${r.opaque} 像素`)
+    check(
+      `主题「${tid}」已绘制`,
+      r.ok === true,
+      `${r.opaque} 像素${r.art ? '（立绘）' : '（程序化）'}`
+    )
 
     // 每套主题都留一张，便于人工比对。
     // 必须等一帧：切换主题后立刻 capturePage 拿到的是上一帧或空图，
