@@ -14,11 +14,24 @@
 | PDF → Word | ✅ 已验证 | 解析文本层并重建段落、标题层级，中文无乱码 |
 | 保真清单 | ✅ | 每次转换逐项打勾，并如实列出没保住的地方 |
 | 桌宠窗口行为 | ✅ | 坐在当前窗口顶边、窗口关闭跳落、拖拽投掷、置顶 |
-| 划词翻译 | ✅ | 内置离线词典（50+ 学术高频词），零网络延迟 |
+| 划词即译 | ✅ | 全局监听选区，本地词典命中即弹气泡，零网络延迟 |
 | 气泡问答 | ✅ | OpenAI 兼容协议，支持 DeepSeek/千问/豆包/自定义 |
 | 隐私状态灯 | ✅ | 顶栏常亮，明确显示此刻是否有数据离开本机 |
 | 托盘常驻 / 单实例 / 开机自启 | ✅ | 自启延迟 30 秒，不抢开机资源 |
+| Windows 打包 | ✅ | 产物 237MB，打包后能正常启动 |
 | 扫描件 OCR | ⏳ | 识别得出，但未内置引擎，需自行配置 |
+
+### 划词即译的行为约定
+
+按「不打扰」设计，默认只在**值得打扰**时才开口：
+
+- **命中本地词典** → 立即弹气泡，零延迟、零出网
+- **未命中** → 不擅自联网，先问你要不要「深度解释」
+- **噪音选区直接忽略**：网址、纯数字、文件路径、代码片段、不含英文字母的选区
+- **词组取最长词查询**：`baseline proximity` → 查 `proximity`
+- **失焦即隐藏**，另有 8 秒兜底自动消失
+
+读选区走 `WM_GETTEXT` 而非剪贴板——读剪贴板会覆盖你刚复制的内容。
 
 ---
 
@@ -39,13 +52,33 @@ npm run dev          # electron-vite 热更新
 ### 测试
 
 ```bash
-npm run typecheck    # 两套 tsconfig 全量类型检查
-npm run test:convert # 纯 Node 验证 PDF→Word 引擎（13 项）
-npm run test:regression  # Electron 内跑完整双向转换回归（16 项）
-node scripts/run-smoke.mjs   # 启动应用做冒烟测试（22 项，含截图）
+npm run typecheck         # 两套 tsconfig 全量类型检查
+npm run test:convert      # 纯 Node 验证 PDF→Word 引擎（13 项）
+npm run test:regression   # Electron 内跑完整回归（26 项）
+node scripts/run-smoke.mjs     # 启动应用做冒烟测试（含三窗口截图核验）
+npm run probe:packaged    # 验证打包产物真的能启动
 ```
 
-**当前状态：转换回归 16/16 通过，冒烟测试全部通过。**
+**当前状态：转换回归 26/26 通过，冒烟测试全部通过，打包产物可启动。**
+
+### 打包
+
+```bash
+npm run pack    # 生成 dist/win-unpacked（免安装目录）
+npm run dist    # 生成 NSIS 安装包
+```
+
+体积构成（`npm run pack` 后）：
+
+| 部分 | 优化前 | 优化后 | 手段 |
+|---|---|---|---|
+| `app.asar` | 55MB | 7MB | 依赖移入 devDependencies（bundle 已内联） |
+| `locales` | 41MB | 2.9MB | 只保留 zh-CN / en-US |
+| 合计 | 323MB | 237MB | |
+
+方案书预算为 80MB，**未达成**：Electron 运行时本身（`Hearth.exe` 约 181MB）
+就占了大部分，这是 Electron 应用的固有成本。若要真正压到 80MB，
+需换用 Tauri 之类的轻量壳，属于架构级改动，不在 v0.1 范围内。
 
 ---
 
@@ -148,11 +181,24 @@ v0.1 不含任何二进制美术资源，角色由 PixiJS `Graphics` 程序化�
 
 ## 已知限制
 
+- **安装包 237MB，超出方案书 80MB 预算**：Electron 运行时本身占约 181MB，
+  已把应用自身从 55MB 压到 7MB、语言包从 41MB 压到 2.9MB。要达标需换壳技术。
 - **扫描件 OCR 未内置引擎**：能识别出「这是扫描件」并如实报错，不会假装成功
 - **复杂表格保真有限**：PDF 的表格线信息本就稀疏，基础表格可重建，嵌套/合并单元格可能以文字呈现
 - **公式以文本重建**：不保证排版等效，转换后会明确标注，建议对照原稿核对
 - **双栏重排**：按栏顺序重排，跨栏段落可能被拆开
+- **划词只覆盖有文本层的控件**：Chromium 自绘控件（部分 Electron 应用、游戏画面）取不到选区
+- **开机自启未实测**：`reg.exe` 在部分受限环境被程序黑名单拦截，逻辑已写好但未验证
 - **空闲 CPU 预算**已用降帧实现，但未做长期实测；上生产前需连续运行 24 小时验证
+
+## 已知环境问题
+
+| 现象 | 原因 | 应对 |
+|---|---|---|
+| `require('electron')` 拿到路径字符串 | 本机设了 `ELECTRON_RUN_AS_NODE=1` | 用 `npm run app`，它会清掉该变量 |
+| `git push` 报 TLS 握手失败 | 本机 curl 直连 github 返回 000 | 用 `python scripts/push_via_api.py` 走 Git Data API |
+| 打包中断在 winCodeSign | 非管理员会话无法创建 macOS 符号链接 | 见 `scripts/prepare-win-codesign.mjs`，尚未完全解决 |
+| Chromium GPU 进程崩溃 | 沙箱无 GPU | 启动加 `--disable-gpu --in-process-gpu` |
 
 ---
 
