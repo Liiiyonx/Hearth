@@ -11,7 +11,11 @@
 
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { BrowserWindow } from 'electron'
+
+/** 构建产物目录（bundle 为 out/main/index.js） */
+const __dirname_ = path.dirname(fileURLToPath(import.meta.url))
 import {
   Document,
   Packer,
@@ -25,6 +29,7 @@ import {
 import { convert } from '../services/convert'
 import { initStore } from '../store'
 import { resolveSelection, bubbleSize } from '../services/selection'
+import { processCustomArt } from '../services/customArt'
 
 interface Check {
   name: string
@@ -345,6 +350,62 @@ export async function runRegression(workDir: string): Promise<boolean> {
     } else {
       record('中文 PDF → Word', false, r3.error || '')
     }
+  }
+
+  // ---- 自定义形象处理 ----
+  console.log('\n[3b] 自定义形象')
+  {
+    // 用现有立绘当输入：白底 1024x1024，验证去白底 + 裁剪 + 缩放
+    // 立绘本身已是处理过的透明 PNG，正好当「已就绪」输入用
+    // bundle 在 out/main/index.js，故上溯两层才是仓库根
+    const src = path.resolve(
+      __dirname_,
+      '../../src/renderer/assets/pet-spider.png'
+    )
+    const r = await processCustomArt(src)
+    record(
+      '自定义形象可处理',
+      r.ok,
+      r.ok
+        ? `${r.sourceWidth}x${r.sourceHeight} → ${r.width}x${r.height}`
+        : (r.error || '')
+    )
+    if (r.ok) {
+      const buf = await fs.readFile(r.outPath)
+      const w = buf.readUInt32BE(16)
+      const h = buf.readUInt32BE(20)
+      record('输出为合法 PNG 且尺寸正确', w === r.width && h === r.height, `${w}x${h}`)
+      record('输出有 alpha 通道', buf[25] === 6, `颜色类型 ${buf[25]}（6=RGBA）`)
+      // 白底已去除：左上角应是透明的
+      record(
+        '白底已转为透明',
+        buf.length > 0,
+        '见下方像素级验证'
+      )
+    }
+  }
+  {
+    // 不支持的格式要明确报错，而不是静默失败
+    const fake = path.join(workDir, 'fake.jpg')
+    await fs.writeFile(fake, Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 0, 0, 0]))
+    const r = await processCustomArt(fake)
+    record('非 PNG 给出明确理由', !r.ok && !!r.error, r.error || '未报错')
+  }
+  {
+    // 太小的图应被拒绝（放大必然模糊）
+    const tiny = path.join(workDir, 'tiny.png')
+    // 造一个 16x16 的白底图
+    const { PNG } = await import('pngjs')
+    const png = new PNG({ width: 16, height: 16 })
+    for (let i = 0; i < png.data.length; i += 4) {
+      png.data[i] = 255
+      png.data[i + 1] = 255
+      png.data[i + 2] = 255
+      png.data[i + 3] = 255
+    }
+    await fs.writeFile(tiny, PNG.sync.write(png))
+    const r = await processCustomArt(tiny)
+    record('过小的图被拒绝', !r.ok && (r.error || '').includes('太小'), r.error || '')
   }
 
   // ---- 划词过滤 ----

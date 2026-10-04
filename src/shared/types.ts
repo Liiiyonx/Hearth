@@ -159,7 +159,7 @@ export interface AppSettings {
 }
 
 /** 桌宠形象主题标识（与渲染进程 themes.ts 保持一致） */
-export type PetThemeId = 'hearth' | 'spider' | 'dusk' | 'ember' | 'mint'
+export type PetThemeId = 'hearth' | 'spider' | 'dusk' | 'ember' | 'mint' | 'custom'
 
 export const DEFAULT_SETTINGS: AppSettings = {
   provider: 'deepseek',
@@ -179,6 +179,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
 
 /** 形象主题的中文名与说明，供设置面板展示 */
 export const THEME_OPTIONS: { id: PetThemeId; name: string; desc: string }[] = [
+  { id: 'custom', name: '我的形象', desc: '用你自己的图片当桌宠' },
   { id: 'spider', name: '蛛网', desc: '原创卡通蜘蛛侠风格：红蓝配色、蛛网纹理、胸口蜘蛛徽记' },
   { id: 'hearth', name: '围炉', desc: '最初的青绿色小团子' },
   { id: 'dusk', name: '夜色', desc: '安静的深蓝' },

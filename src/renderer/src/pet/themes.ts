@@ -13,7 +13,7 @@
  */
 
 /** 主题标识 */
-export type ThemeId = 'hearth' | 'spider' | 'dusk' | 'ember' | 'mint'
+export type ThemeId = 'hearth' | 'spider' | 'dusk' | 'ember' | 'mint' | 'custom'
 
 /** 调色板 */
 export interface Palette {
@@ -311,6 +311,22 @@ export const THEMES: Record<ThemeId, ThemeDef> = {
     },
     draw: drawEmber
   },
+  // 自定义形象：art 由主进程在运行时注入（用户上传后才存在）
+  custom: {
+    id: 'custom',
+    name: '我的形象',
+    desc: '用你自己的图片当桌宠',
+    palette: {
+      body: 0x8fa8a1,
+      dark: 0x6b817a,
+      belly: 0xeaf2ef,
+      blush: 0xffb4b4,
+      hair: 0x3d4a47,
+      eye: 0x1f2a28
+    },
+    draw: drawHearth
+  },
+
   mint: {
     id: 'mint',
     name: '薄荷',
@@ -329,7 +345,7 @@ export const THEMES: Record<ThemeId, ThemeDef> = {
 
 export const THEME_LIST: ThemeDef[] = Object.values(THEMES)
 
-/** 容错：未知 id 回落到围炉 */
+/** 容错：未知 id 回落到围炉*/
 export function getTheme(id: string | undefined): ThemeDef {
   return (id && THEMES[id as ThemeId]) || THEMES.hearth
 }

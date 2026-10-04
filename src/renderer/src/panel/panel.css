@@ -814,3 +814,44 @@ select:focus {
   color: var(--muted);
   margin-top: 1px;
 }
+
+/* ===== 自定义形象操作区 ===== */
+.art-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 10px 0 4px;
+}
+
+.btn {
+  appearance: none;
+  border: 1.5px solid var(--brand);
+  background: var(--brand);
+  color: #fff;
+  font: inherit;
+  font-size: 12.5px;
+  padding: 6px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: filter .15s;
+}
+
+.btn:hover {
+  filter: brightness(1.06);
+}
+
+.btn:disabled {
+  opacity: .6;
+  cursor: default;
+}
+
+.btn.ghost {
+  background: transparent;
+  color: var(--brand);
+}
+
+.art-msg {
+  font-size: 11.5px;
+  color: var(--muted);
+}

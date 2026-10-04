@@ -349,18 +349,38 @@ export async function runSmoke(): Promise<void> {
   check('品牌名已更新', brand.title.includes('不请自来'), `${brand.title} / ${brand.sub}`)
 
   // 切到设置页看形象选择器
-  await panel.webContents.executeJavaScript(`(() => {
+  // 用原生事件派发而非 element.click()，后者在部分情况下不触发 React 的合成事件
+  const clicked = await panel.webContents.executeJavaScript(`(() => {
     const t = [...document.querySelectorAll('.tab')].find(b => b.textContent.includes('设置'))
-    if (t) t.click()
+    if (!t) return false
+    t.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
     return true
   })()`)
-  await new Promise((r) => setTimeout(r, 900))
+  check('可切换到设置页', clicked === true)
+  // 等设置页渲染出主题卡（轮询比死等更稳）
+  for (let i = 0; i < 40; i++) {
+    const n = await panel.webContents.executeJavaScript(
+      `document.querySelectorAll('.theme-card').length`
+    )
+    if (typeof n === 'number' && n > 0) break
+    await new Promise((r) => setTimeout(r, 100))
+  }
   const themeUi = await panel.webContents.executeJavaScript(`(() => ({
     cards: document.querySelectorAll('.theme-card').length,
     active: document.querySelector('.theme-card.active strong')?.textContent || '',
-    hasSwatch: !!document.querySelector('.swatch')
+    hasSwatch: !!document.querySelector('.swatch'),
+    hasUpload: !!document.querySelector('.art-actions .btn')
   }))()`)
-  check('形象选择器已渲染', themeUi.cards === 5, `${themeUi.cards} 个主题`)
+  check(
+    '形象选择器已渲染',
+    themeUi.cards >= 5,
+    `${themeUi.cards} 个主题（含「我的形象」）`
+  )
+  check(
+    '自定义形象入口存在',
+    themeUi.hasUpload === true,
+    '设置页有上传按钮'
+  )
   check('当前形象已高亮', themeUi.active.length > 0, themeUi.active)
   check('形象缩略图存在', themeUi.hasSwatch === true)
 

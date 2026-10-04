@@ -32,6 +32,16 @@ const api = {
 
   // —— 划词与对话 ——
   lookup: (word: string) => ipcRenderer.invoke('dict:lookup', word),
+  // —— 自定义形象 ——
+  pickCustomArt: (): Promise<{ ok: boolean; error?: string; saved?: AppSettings }> =>
+    ipcRenderer.invoke('art:pick'),
+  clearCustomArt: (): Promise<boolean> => ipcRenderer.invoke('art:clear'),
+  onCustomArt: (cb: (p: { url: string; height: number }) => void) => {
+    const handler = (_e: unknown, p: { url: string; height: number }) => cb(p)
+    ipcRenderer.on('pet:custom-art', handler)
+    return () => { ipcRenderer.removeListener('pet:custom-art', handler) }
+  },
+
   // —— 桌宠形象 ——
   onThemeChanged: (cb: (id: PetThemeId) => void) => {
     const handler = (_e: unknown, id: PetThemeId) => cb(id)
@@ -51,7 +61,8 @@ const api = {
   ask: (question: string) => ipcRenderer.invoke('chat:ask', question),
   polish: (text: string, style: 'concise' | 'formal' | 'friendly') =>
     ipcRenderer.invoke('chat:polish', text, style),
-  getPersona: (): Promise<Persona> => ipcRenderer.invoke('chat:persona'),  savePersona: (p: Persona): Promise<Persona> => ipcRenderer.invoke('chat:savePersona', p),
+  getPersona: (): Promise<Persona> => ipcRenderer.invoke('chat:persona'),
+  savePersona: (p: Persona): Promise<Persona> => ipcRenderer.invoke('chat:savePersona', p),
   getSessions: (): Promise<ChatSession[]> => ipcRenderer.invoke('chat:sessions'),
   saveSession: (s: ChatSession): Promise<void> => ipcRenderer.invoke('chat:saveSession', s),
   deleteSession: (id: string): Promise<void> => ipcRenderer.invoke('chat:deleteSession', id),

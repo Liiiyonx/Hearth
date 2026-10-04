@@ -152,6 +152,18 @@ export class PetStage {
    * 形象是「可自定义」的：换主题 = 换绘制器 + 换调色板，
    * 动画骨架、行为状态机、隐私逻辑全部复用。
    */
+  /**
+   * 设定自定义形象的立绘。
+   * 由主进程在用户上传后 / 启动恢复时调用。
+   */
+  async setCustomArt(url: string, height: number): Promise<void> {
+    const theme = THEMES.custom
+    if (!theme) return
+    theme.art = url ? { src: url, height } : undefined
+    this.themeId = 'spider'
+    this.setTheme('custom', true)
+  }
+
   setTheme(id: ThemeId, force = false): void {
     if (id === this.themeId && !force) return
     this.themeId = id

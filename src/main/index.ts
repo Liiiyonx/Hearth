@@ -1,6 +1,17 @@
-import { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, globalShortcut, shell } from 'electron'
+import {
+  app,
+  BrowserWindow,
+  ipcMain,
+  Tray,
+  Menu,
+  nativeImage,
+  globalShortcut,
+  shell,
+  dialog
+} from 'electron'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { existsSync } from 'node:fs'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import type {
   ConvertResult,
   ConvertDirection,
@@ -12,6 +23,12 @@ import type {
 import { convert, convertBatch, inferDirection } from './services/convert'
 import { lookup } from './services/dictionary'
 import { resolveSelection, bubbleSize } from './services/selection'
+import {
+  processCustomArt,
+  clearCustomArt,
+  customArtPath,
+  displayHeightFor
+} from './services/customArt'
 import type { LookupResult } from '../shared/types'
 import { ask, polishText, cloudReady, setEgressListener, deepExplain } from './services/llm'
 import { createWin32Bridge, screenSize } from './services/win32'
@@ -507,6 +524,59 @@ function registerIpc(): void {
   ipcMain.on('panel:open', showPanel)
 
   ipcMain.on('panel:close', () => panelWindow?.hide())
+
+  // 桌宠启动时若主题为 custom，直接把已处理的图给它，
+  // 避免渲染进程自己去猜路径（那里拿不到 userData 的绝对路径）
+  petWindow?.webContents.on('did-finish-load', () => {
+    void getSettings().then((s) => {
+      if (s.petTheme !== 'custom') return
+      const p = customArtPath()
+      if (!existsSync(p)) return
+      petWindow?.webContents.send('pet:custom-art', {
+        url: pathToFileURL(p).href,
+        height: 186
+      })
+    })
+  })
+
+  // —— 自定义形象 ——
+  ipcMain.handle(
+    'art:pick',
+    async (): Promise<{ ok: boolean; error?: string; saved?: AppSettings }> => {
+    try {
+      const r = await dialog.showOpenDialog({
+        title: '选择桌宠形象图片',
+        properties: ['openFile'],
+        filters: [
+          { name: 'PNG 图片', extensions: ['png'] }
+        ]
+      })
+      if (r.canceled || r.filePaths.length === 0) {
+        return { ok: false, error: '已取消' }
+      }
+      const res = await processCustomArt(r.filePaths[0])
+      if (!res.ok) {
+        return { ok: false, error: res.error }
+      }
+
+      // 切到自定义主题并持久化
+      const saved = await saveSettings({ petTheme: 'custom' as AppSettings['petTheme'] })
+      petWindow?.webContents.send('pet:custom-art', {
+        url: pathToFileURL(res.outPath).href,
+        height: displayHeightFor(res.width, res.height)
+      })
+      return { ok: true, saved }
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : String(e) }
+    }
+  })
+
+  ipcMain.handle('art:clear', async (): Promise<boolean> => {
+    await clearCustomArt()
+    await saveSettings({ petTheme: 'spider' as AppSettings['petTheme'] })
+    petWindow?.webContents.send('pet:custom-art', { url: '', height: 0 })
+    return true
+  })
 
   // —— 划词气泡 ——
   ipcMain.handle('bubble:deepExplain', async (_e, word: string) => deepExplain(word, ''))

@@ -81,8 +81,14 @@ function PetApp(): React.JSX.Element {
 
       // 面板里换了形象 → 这里立即重建，无需重启
       window.uninvited.onThemeChanged((id) => {
+        // 切到 custom 时先等主进程下发图片路径，否则会短暂显示几何占位
         stage.setTheme(id)
         stage.requestFastRender()
+      })
+
+      // 用户上传/启动恢复的自定义形象
+      window.uninvited.onCustomArt(({ url, height }) => {
+        void stage.setCustomArt(url, height).then(() => stage.requestFastRender())
       })
 
       const loop = (): void => {

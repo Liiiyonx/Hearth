@@ -441,13 +441,48 @@ function SettingsPane({ egress }: { egress: EgressStatus }): React.JSX.Element {
   const [s, setS] = useState<AppSettings | null>(null)
   const [persona, setPersona] = useState<Persona | null>(null)
   const [saved, setSaved] = useState(false)
+  const [artBusy, setArtBusy] = useState(false)
+  const [artMsg, setArtMsg] = useState('')
+  const [hasCustom, setHasCustom] = useState(false)
 
   useEffect(() => {
     void window.uninvited.getSettings().then(setS)
     void window.uninvited.getPersona().then(setPersona)
   }, [])
 
+  // 是否已有自定义形象
+  // 注意：所有 hooks 必须在早退 return 之前声明，
+  // 否则「渲染的 hooks 数量」会随加载状态变化，React 直接崩掉（错误 #310）。
+  useEffect(() => {
+    if (s?.petTheme === 'custom') setHasCustom(true)
+  }, [s?.petTheme])
+
   if (!s || !persona) return <div className="pane">载入中…</div>
+
+
+  const onPick = async (): Promise<void> => {
+    setArtBusy(true)
+    setArtMsg('')
+    const r = await window.uninvited.pickCustomArt()
+    setArtBusy(false)
+    if (r.ok) {
+      setHasCustom(true)
+      if (r.saved) setS(r.saved)
+      setArtMsg('已应用，白底已自动去除')
+    } else if (r.error && r.error !== '已取消') {
+      setArtMsg(r.error)
+    }
+  }
+
+  const onClear = async (): Promise<void> => {
+    setArtBusy(true)
+    await window.uninvited.clearCustomArt()
+    const next = await window.uninvited.getSettings()
+    setS(next)
+    setHasCustom(false)
+    setArtMsg('已恢复默认形象')
+    setArtBusy(false)
+  }
 
   const patch = async (p: Partial<AppSettings>): Promise<void> => {
     const next = await window.uninvited.saveSettings(p)
@@ -461,6 +496,17 @@ function SettingsPane({ egress }: { egress: EgressStatus }): React.JSX.Element {
       <section className="card">
         <h2>桌宠形象</h2>
         <p className="tip">形象随时可换，动画骨架不变。选中后桌宠立刻变换，无需重启。</p>
+        <div className="art-actions">
+          <button className="btn" onClick={() => void onPick()}>
+            {artBusy ? '处理中…' : '上传图片当形象'}
+          </button>
+          {hasCustom && (
+            <button className="btn ghost" onClick={() => void onClear()}>
+              恢复默认形象
+            </button>
+          )}
+          {artMsg && <span className="art-msg">{artMsg}</span>}
+        </div>
         <div className="theme-grid">
           {THEME_OPTIONS.map((t) => (
             <button
