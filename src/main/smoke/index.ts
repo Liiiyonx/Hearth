@@ -49,10 +49,13 @@ export async function runSmoke(): Promise<void> {
   const pet = new BrowserWindow({
     width: 220,
     height: 260,
-    // 必须真正显示：隐藏窗口不会合成，capturePage 只能拿到空白透明图
+    // 必须真正显示：隐藏窗口不会合成，capturePage 只能拿到空白图
     show: true,
     frame: false,
-    transparent: true,
+    // 用不透明底色代替透明窗口：软件渲染下透明窗口的截图拿不到内容，
+    // 形象核验必须看到真实画面，所以这里牺牲透明效果换取可验证性。
+    transparent: false,
+    backgroundColor: '#EEF3F1',
     webPreferences: {
       preload: path.join(outRoot, 'preload/index.mjs'),
       contextIsolation: true,
@@ -153,13 +156,51 @@ export async function runSmoke(): Promise<void> {
     })()`)
     check(`主题「${tid}」已绘制`, r.ok === true, `${r.opaque} 像素`)
 
-    if (tid === 'spider') {
-      const shot = path.join(shotDir, 'pet-spider.png')
-      const png = (await pet.webContents.capturePage()).toPNG()
-      writeFileSync(shot, png)
-      console.log(`  蛛网形象：${shot}`)
-    }
+    // 每套主题都留一张，便于人工比对。
+    // 必须等一帧：切换主题后立刻 capturePage 拿到的是上一帧或空图，
+    // 合成器还没把新画面提交上来。
+    await new Promise((r) => setTimeout(r, 400))
+    const shot = path.join(shotDir, `theme-${tid}.png`)
+    writeFileSync(shot, (await pet.webContents.capturePage()).toPNG())
+    console.log(`  主题 ${tid} 截图：${shot}`)
   }
+
+  // 回归防护：曾经有个 bug——眼睛/嘴型缓存只比状态不比主题，
+  // 换主题后眼睛不重绘，导致「换个主题还是那张脸」。这里固化该检查。
+  const distinct = await pet.webContents.executeJavaScript(`(() => {
+    const st = window.__stage
+    const c = document.getElementById('stage')
+    const gl = c.getContext('webgl2') || c.getContext('webgl')
+    const sample = () => {
+      st.app.render()
+      const buf = new Uint8Array(c.width * c.height * 4)
+      gl.readPixels(0, 0, c.width, c.height, gl.RGBA, gl.UNSIGNED_BYTE, buf)
+      let sum = 0
+      for (let i = 0; i < buf.length; i += 4) sum += buf[i] * 3 + buf[i+1] * 5 + buf[i+2] * 7
+      return sum
+    }
+    const out = {}
+    for (const id of ['spider', 'hearth', 'dusk']) {
+      st.setTheme(id)
+      st.requestFastRender()
+      out[id] = sample()
+    }
+    return out
+  })()`)
+  const sigs = Object.values(distinct)
+  check(
+    '换主题后画面确实改变',
+    new Set(sigs).size === sigs.length,
+    Object.entries(distinct).map(([k, v]) => `${k}=${v}`).join(' ')
+  )
+
+  // 回到默认形象，别把截图留在别的样子上
+  await pet.webContents.executeJavaScript(`(() => {
+    const st = window.__stage
+    st.setTheme('spider'); st.requestFastRender()
+    return true
+  })()`)
+  await new Promise((r) => setTimeout(r, 500))
 
   const tree = await pet.webContents.executeJavaScript(`(() => {
     const st = window.__stage

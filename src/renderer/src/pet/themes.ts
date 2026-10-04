@@ -52,26 +52,6 @@ export interface ThemeDef {
 
 /** —— 绘制工具 —— */
 
-/** 在身体上叠一层网格纹理（蜘蛛侠的蛛网肌理） */
-function webTexture(g: import('pixi.js').Graphics, color: number, alpha = 0.22): void {
-  const r = 44
-  const cx = 0
-  const cy = 42
-  // 从中心向外的辐射线
-  for (let i = 0; i < 16; i++) {
-    const a = (i / 16) * Math.PI * 2
-    g.moveTo(cx, cy)
-    g.lineTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r)
-  }
-  g.stroke({ color, width: 0.7, alpha })
-  // 同心环：间距拉开一点，避免糊成一片
-  for (let ring = 9; ring <= r; ring += 9) {
-    g.moveTo(cx + ring, cy)
-    g.arc(cx, cy, ring, 0, Math.PI * 2)
-  }
-  g.stroke({ color, width: 0.7, alpha })
-}
-
 /**
  * 胸口蜘蛛徽记。
  * 带一圈深色描边，否则浅色徽记压在红底上会糊掉。
@@ -148,18 +128,44 @@ function drawSpider({ body, head, p }: DrawCtx): void {
   // 先画一圈深色底当描边：桌宠是透明窗口，浅色背景下没有描边会糊掉
   body.ellipse(0, 44, 42, 46).fill({ color: 0x141c30, alpha: 0.28 })
   body.ellipse(0, 44, 40, 44).fill({ color: p.body })
-  // 下半身深蓝：经典红蓝拼色
-  body.ellipse(0, 64, 36, 26).fill({ color: p.dark })
+  // 下半身与腋下用深蓝——分界抬到腋下，这是这类英雄角色的标准画法
+  body.ellipse(0, 60, 37, 30).fill({ color: p.dark })
+  // 两侧收出腋下弧线，让红蓝交界不是一条平切
+  body.moveTo(-40, 40)
+  body.quadraticCurveTo(-30, 48, -22, 44)
+  body.lineTo(-22, 58)
+  body.lineTo(-40, 56)
+  body.fill({ color: p.dark })
+  body.moveTo(40, 40)
+  body.quadraticCurveTo(30, 48, 22, 44)
+  body.lineTo(22, 58)
+  body.lineTo(40, 56)
+  body.fill({ color: p.dark })
   // 头套延伸到肩上（省略颈部，让头直接压在身上）
   body.ellipse(0, 20, 38, 17).fill({ color: p.hair })
 
-  // 蛛网纹理：只在下半身与红色区交界处轻扫，不铺满
-  webTexture(body, p.belly, 0.2)
+  // 披风：肩后一片深红，只露出肩线以上的一点
+  body.moveTo(-30, 26)
+  body.quadraticCurveTo(-44, 40, -38, 62)
+  body.quadraticCurveTo(-30, 52, -22, 44)
+  body.fill({ color: 0x8f1a16, alpha: 0.9 })
+  body.moveTo(30, 26)
+  body.quadraticCurveTo(44, 40, 38, 62)
+  body.quadraticCurveTo(30, 52, 22, 44)
+  body.fill({ color: 0x8f1a16, alpha: 0.9 })
+
+  // 蛛网纹理：只刷蓝色下半身，红色胸腹保持干净
+  for (let i = 0; i < 12; i++) {
+    const a = (i / 12) * Math.PI * 2
+    body.moveTo(0, 60)
+    body.lineTo(Math.cos(a) * 44, 60 + Math.sin(a) * 30)
+  }
+  body.stroke({ color: p.belly, width: 0.7, alpha: 0.18 })
 
   // 胸口蜘蛛徽记：深色圆底衬托，位置在红色区内
-  body.circle(0, 30, 14).fill({ color: 0x0a1a3a, alpha: 0.55 })
-  body.circle(0, 30, 14).stroke({ color: p.belly, width: 1.2, alpha: 0.6 })
-  spiderEmblemAt(body, p.belly, 0x0a1a3a, 0, 30, 1.15)
+  body.circle(0, 34, 13.5).fill({ color: 0x0a1a3a, alpha: 0.55 })
+  body.circle(0, 34, 13.5).stroke({ color: p.belly, width: 1.2, alpha: 0.6 })
+  spiderEmblemAt(body, p.belly, 0x0a1a3a, 0, 34, 1.12)
 
   // 底部阴影
   body.ellipse(0, 82, 34, 8).fill({ color: 0x000000, alpha: 0.2 })

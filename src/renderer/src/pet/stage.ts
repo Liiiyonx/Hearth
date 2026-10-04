@@ -358,8 +358,10 @@ export class PetStage {
               ? 'closed'
               : 'open'
 
-    if (eye !== this.lastEye) {
-      this.lastEye = eye
+    // 缓存键带上主题：不同主题眼型不同，只比eye 会漏掉换主题后的重绘
+    const eyeKey = `${this.themeId}:${eye}`
+    if (eyeKey !== this.lastEye) {
+      this.lastEye = eyeKey
       this.drawEyes(eye)
     }
 
@@ -370,8 +372,9 @@ export class PetStage {
         : this.pose === 'poked' || this.pose === 'falling'
           ? 'open'
           : 'smile'
-    if (mouth !== this.lastMouth) {
-      this.lastMouth = mouth
+    const mouthKey = `${this.themeId}:${mouth}`
+    if (mouthKey !== this.lastMouth) {
+      this.lastMouth = mouthKey
       this.drawMouth(mouth)
     }
 
