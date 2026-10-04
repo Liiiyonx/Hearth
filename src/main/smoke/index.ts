@@ -159,7 +159,8 @@ export async function runSmoke(): Promise<void> {
     // 每套主题都留一张，便于人工比对。
     // 必须等一帧：切换主题后立刻 capturePage 拿到的是上一帧或空图，
     // 合成器还没把新画面提交上来。
-    await new Promise((r) => setTimeout(r, 400))
+    // 立绘是异步加载的，要等它 decode 完再截图
+    await new Promise((r) => setTimeout(r, 900))
     const shot = path.join(shotDir, `theme-${tid}.png`)
     writeFileSync(shot, (await pet.webContents.capturePage()).toPNG())
     console.log(`  主题 ${tid} 截图：${shot}`)
@@ -188,6 +189,55 @@ export async function runSmoke(): Promise<void> {
     return out
   })()`)
   const sigs = Object.values(distinct)
+  // 贴图模式来回切换：立绘应能正确挂载与卸载，不残留也不丢图
+  interface ArtCycleStep {
+    id: string
+    opaque: number
+    art: boolean
+    theme: string
+  }
+  const artCycle: ArtCycleStep[] = await pet.webContents.executeJavaScript(`(async () => {
+    const st = window.__stage
+    const seq = []
+    for (const id of ['spider', 'hearth', 'spider', 'dusk', 'spider']) {
+      st.setTheme(id)
+      st.requestFastRender()
+      // 等立绘异步加载完成：轮询 artMode 稳定，而非死等固定毫秒
+      const wantArt = id === 'spider'
+      for (let i = 0; i < 40; i++) {
+        if (st.usesArt === wantArt) break
+        await new Promise(r => setTimeout(r, 50))
+      }
+      st.app.render()
+      const c = document.getElementById('stage')
+      const gl = c.getContext('webgl2') || c.getContext('webgl')
+      const buf = new Uint8Array(c.width * c.height * 4)
+      gl.readPixels(0, 0, c.width, c.height, gl.RGBA, gl.UNSIGNED_BYTE, buf)
+      let opaque = 0
+      for (let i = 3; i < buf.length; i += 4) if (buf[i] > 8) opaque++
+      seq.push({ id, opaque, art: st.usesArt, theme: st.currentTheme })
+    }
+    return seq
+  })()`)
+  const spiderSigs = artCycle
+    .filter((x: ArtCycleStep) => x.id === 'spider')
+    .map((x: ArtCycleStep) => x.opaque)
+  // 空闲时桌宠有呼吸缩放，像素数天然小幅波动（实测约 0.2%），
+  // 所以判据是「相对偏差足够小」而非严格相等。
+  // 3% 的阈值仍能抓住「换了别的主题」这种量级差异（那会差 20%+）。
+  const base = spiderSigs[0] ?? 0
+  const spread = base > 0 ? (Math.max(...spiderSigs) - Math.min(...spiderSigs)) / base : 1
+  check(
+    '立绘反复切换后仍一致',
+    spiderSigs.length === 3 && base > 200 && spread < 0.03,
+    `三次切回蛛网：${spiderSigs.join(' / ')}（波动 ${(spread * 100).toFixed(2)}%）`
+  )
+  check(
+    '贴图模式标记正确',
+    artCycle.every((x: ArtCycleStep) => x.art === (x.id === 'spider')),
+    artCycle.map((x: ArtCycleStep) => `${x.id}->${x.theme}:${x.art ? 'art' : 'geo'}`).join(' ')
+  )
+
   check(
     '换主题后画面确实改变',
     new Set(sigs).size === sigs.length,

@@ -56,13 +56,19 @@ let egressTimer: NodeJS.Timeout | null = null
 // 这样测的就是真实代码路径，而不是另写一套模拟实现。
 const isRegressionMode = process.argv.includes('--regression')
 const isSmokeMode = process.argv.includes('--smoke')
+const isPerfMode = process.argv.includes('--perf')
 
-if (isRegressionMode || isSmokeMode) {
+if (isRegressionMode || isSmokeMode || isPerfMode) {
   app.whenReady().then(async () => {
     try {
       if (isSmokeMode) {
         const mod = await import('./smoke/index')
         await mod.runSmoke()
+        return
+      }
+      if (isPerfMode) {
+        const mod = await import('./perf/probe')
+        await mod.runPerfProbe()
         return
       }
       const mod = await import('./regression/index')

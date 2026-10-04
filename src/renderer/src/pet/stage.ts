@@ -1,5 +1,5 @@
 import { Application, Container, Graphics, Sprite, Texture, Text } from 'pixi.js'
-import { getTheme, type ThemeId, type Palette } from './themes'
+import { getTheme, THEMES, type ThemeId, type Palette } from './themes'
 
 /**
  * 桌宠舞台 —— PixiJS 2D 精灵动画（方案书表 2 选型）。
@@ -31,6 +31,19 @@ export class PetStage {
   private zzz!: Text
   /** 当前形象主题 */
   private themeId: ThemeId = 'hearth'
+  /** 整张立绘（贴图模式）；null 表示用程序化几何 */
+  private artSprite: Sprite | null = null
+  /** 是否处于贴图模式 */
+  private artMode = false
+  /** 程序化几何部件，贴图模式下需隐藏 */
+  private geoParts: Container[] = []
+  /**
+   * 主题变更代号。
+   *
+   * 立绘是异步加载的，快速切换主题时后发起的请求可能先返回，
+   * 把过期的贴图挂上去。用代号保证只有「最后一次请求」能生效。
+   */
+  private themeGen = 0
   private palette: Palette = getTheme('hearth').palette
   private t = 0
   private pose: PetPose = 'idle'
@@ -64,6 +77,8 @@ export class PetStage {
     })
     this.app.stage.addChild(this.root)
     this.buildCharacter()
+    // 初始主题若带立绘，这里加载一次（setTheme 对同 id 会提前返回）
+    void this.maybeLoadArt(this.themeId)
 
     // 空闲降帧：默认 maxFPS 即为空闲帧率；有交互时短暂拉满。
     this.app.ticker.maxFPS = this.idleFps
@@ -120,6 +135,7 @@ export class PetStage {
     this.zzz.position.set(30, -62)
     this.zzz.visible = false
 
+    this.geoParts = [body, this.armL, this.armR, this.headG]
     this.bodyG.addChild(body, this.armL, this.armR, this.headG, this.zzz)
     this.root.addChild(this.bodyG)
     // root 是整只角色的定位原点（画布 220x260，角色略微偏右下）。
@@ -136,11 +152,14 @@ export class PetStage {
    * 形象是「可自定义」的：换主题 = 换绘制器 + 换调色板，
    * 动画骨架、行为状态机、隐私逻辑全部复用。
    */
-  setTheme(id: ThemeId): void {
-    if (id === this.themeId) return
+  setTheme(id: ThemeId, force = false): void {
+    if (id === this.themeId && !force) return
     this.themeId = id
     this.palette = getTheme(id).palette
+    // 顺序要紧：destroyAndRebuild 会把 geoParts 换成新的一批 Graphics，
+    // 若先处理立绘再去隐藏几何，拿到的是已被丢弃的旧数组。
     this.destroyAndRebuild()
+    void this.maybeLoadArt(id)
   }
 
   get currentTheme(): ThemeId {
@@ -149,6 +168,11 @@ export class PetStage {
 
   private destroyAndRebuild(): void {
     this.root.removeChildren().forEach((c) => c.destroy({ children: true }))
+    // 关键：立绘随bodyG 一起被销毁了，引用必须清空。
+    // 否则 detachArt 会对一个已销毁对象判真而提前返回，
+    // artMode 永远清不掉（表现为「切回几何主题仍是贴图」）。
+    this.artSprite = null
+    this.artMode = false
     this.buildCharacter()
   }
 
@@ -157,6 +181,87 @@ export class PetStage {
    * v0.2 的「照片生成形象」会走这里——Cloud 端生成立绘后，
    * 用立绘替换程序化头部，骨架与动画完全复用。
    */
+  /** 该主题是否带立绘（贴图模式） */
+  get usesArt(): boolean {
+    return this.artMode
+  }
+
+  /**
+   * 按主题决定用立绘还是程序化几何。
+   * 切换主题时调用；立绘加载失败会自动退回几何形象，不会开天窗。
+   */
+  private async maybeLoadArt(id: ThemeId): Promise<void> {
+    const gen = ++this.themeGen
+
+    // 先同步拆掉上一套：applyArt 里的 img.decode() 是异步的，
+    // 这期间旧贴图会一直挂在身上。
+    this.detachArt()
+
+    const art = THEMES[id]?.art
+    if (!art) {
+      this.geoParts.forEach((g) => (g.visible = true))
+      this.artMode = false
+      return
+    }
+
+    const sp = await this.loadArtSprite(art.src, art.height)
+    // 加载期间又切了主题 → 丢弃这次结果，别把过期的贴图挂上去
+    if (!sp || gen !== this.themeGen) {
+      sp?.destroy(true)
+      return
+    }
+    this.geoParts.forEach((g) => (g.visible = false))
+    this.bodyG.addChild(sp)
+    this.artSprite = sp
+    this.artMode = true
+  }
+
+  /** 只做加载，不动显示状态——便于调用方决定何时挂载 */
+  private async loadArtSprite(url: string, height: number): Promise<Sprite | null> {
+    try {
+      const img = new Image()
+      img.src = url
+      await img.decode()
+      const sp = new Sprite(Texture.from(img))
+      sp.anchor.set(0.5, 1)
+      sp.height = height
+      sp.width = (height * img.width) / img.height
+      sp.position.set(0, 88)
+      return sp
+    } catch (e) {
+      console.warn('[pet] 立绘加载失败，退回程序化形象', e)
+      return null
+    }
+  }
+
+  /** 卸下立绘（不碰几何可见性，由调用方决定） */
+  private detachArt(): void {
+    if (!this.artSprite) return
+    this.bodyG.removeChild(this.artSprite)
+    this.artSprite.destroy(true)
+    this.artSprite = null
+    this.artMode = false
+  }
+
+  /** 卸下立绘并恢复程序化形象 */
+  removeArt(): void {
+    this.detachArt()
+    this.geoParts.forEach((g) => (g.visible = true))
+    this.artMode = false
+  }
+
+  /**
+   * 用整张立绘替换程序化形象。
+   *
+   * 程序化 Graphics 画角色的天花板很低——只有圆、椭圆、贝塞尔，
+   * 怎么调参数都做不出真正的角色美术。立绘模式才是桌宠该有的做法。
+   * 动画骨架（呼吸缩放、朝向、姿态）仍然复用。
+   */
+  async applyArt(url: string, opts: { height: number }): Promise<boolean> {
+    await this.maybeLoadArt(this.themeId)
+    return this.artMode
+  }
+
   async applyGeneratedFace(dataUrl: string): Promise<void> {
     try {
       const img = new Image()

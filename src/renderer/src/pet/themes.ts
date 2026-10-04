@@ -48,6 +48,14 @@ export interface ThemeDef {
   desc: string
   palette: Palette
   draw(ctx: DrawCtx): void
+  /**
+   * 可选的整张立绘。
+   *
+   * 程序化 Graphics 画角色的天花板很低——只有圆、椭圆、贝塞尔，
+   * 真正的角色美术必须用位图。有art 时走贴图模式，
+   * 动画骨架（呼吸缩放、朝向、姿态）仍然复用。
+   */
+  art?: { src: string; height: number }
 }
 
 /** —— 绘制工具 —— */
@@ -262,7 +270,7 @@ export const THEMES: Record<ThemeId, ThemeDef> = {
   spider: {
     id: 'spider',
     name: '蛛网',
-    desc: '原创卡通蜘蛛侠风格：红蓝配色、蛛网纹理、胸口蜘蛛徽记',
+    desc: '原创卡通蜘蛛侠风格立绘：红蓝战衣、蛛网纹理、胸口蜘蛛徽记',
     palette: {
       body: 0xd8352a, // 经典英雄红
       dark: 0x1b4fa8, // 深蓝分区
@@ -271,7 +279,9 @@ export const THEMES: Record<ThemeId, ThemeDef> = {
       hair: 0xc42a22, // 头套红
       eye: 0x16233f
     },
-    draw: drawSpider
+    draw: drawSpider,
+    // 立绘模式：真正的角色美术，而非几何拼色
+    art: { src: new URL('../../assets/pet-spider.png', import.meta.url).href, height: 186 }
   },
   dusk: {
     id: 'dusk',
