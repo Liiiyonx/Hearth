@@ -248,6 +248,68 @@ export async function runSmoke(): Promise<void> {
   console.log(`  桌宠：${petShot}`)
   console.log(`  面板：${panelShot}`)
 
+  // —— 划词气泡 ——
+  const bubble = new BrowserWindow({
+    width: 340,
+    height: 208,
+    show: true,
+    frame: false,
+    transparent: true,
+    backgroundColor: '#00000000',
+    webPreferences: {
+      preload: path.join(outRoot, 'preload/index.mjs'),
+      contextIsolation: true,
+      nodeIntegration: false
+    }
+  })
+
+  const bubbleErrors: string[] = []
+  bubble.webContents.on('console-message', (_e, level, message) => {
+    if (level >= 2 && !isBenignWarning(message)) bubbleErrors.push(message)
+  })
+
+  await bubble.loadFile(path.join(outRoot, 'renderer/bubble.html')).catch((e) => {
+    bubbleErrors.push('load失败：' + e.message)
+  })
+  await new Promise((r) => setTimeout(r, 1500))
+
+  check('气泡窗口加载', true, bubble.webContents.getURL().split('/').pop())
+  check('气泡无控制台错误', bubbleErrors.length === 0, bubbleErrors.slice(0, 2).join(' | '))
+
+  // 注入一条本地词典命中的数据，验证渲染
+  await bubble.webContents.send('bubble:data', {
+    word: 'robust',
+    hit: {
+      word: 'robust',
+      phonetic: '/rəʊˈbʌst/',
+      meanings: ['adj. 强健的；稳健的；鲁棒的'],
+      examples: ['The method is robust to noise.'],
+      labels: ['CET6', '学术'],
+      source: 'local-dict'
+    }
+  })
+  await new Promise((r) => setTimeout(r, 800))
+
+  const bubbleUi = await bubble.webContents.executeJavaScript(`(() => ({
+    hasBubble: !!document.querySelector('.bubble'),
+    word: document.querySelector('.word')?.textContent || '',
+    meaningCount: document.querySelectorAll('.meanings li').length,
+    hasExample: !!document.querySelector('.example s p') || !!document.querySelector('.examples p'),
+    src: document.querySelector('.src')?.textContent || ''
+  }))()`)
+  check('气泡已渲染内容', bubbleUi.hasBubble === true, `「${bubbleUi.word}」`)
+  check('释义条目已显示', bubbleUi.meaningCount >= 1, `${bubbleUi.meaningCount} 条`)
+  check('例句已显示', bubbleUi.hasExample === true)
+  check('标注了本地来源', bubbleUi.src.includes('本地'), bubbleUi.src)
+
+  const bubbleShot = path.join(shotDir, 'bubble.png')
+  const bubblePng = (await bubble.webContents.capturePage()).toPNG()
+  writeFileSync(bubbleShot, bubblePng)
+  check('气泡截图已生成', bubblePng.length > 2000, `${(bubblePng.length / 1024).toFixed(1)} KB`)
+  console.log(`  气泡：${bubbleShot}`)
+
+  bubble.destroy()
+
   panel.destroy()
 
   console.log('\n=== 汇总 ===')

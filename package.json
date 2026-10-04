@@ -3,26 +3,21 @@
   "version": "0.1.0",
   "description": "Hearth（围炉）· 一个会转文档、会读论文的桌面小人",
   "main": "out/main/index.js",
-
   "author": "Hearth",
   "license": "MIT",
   "private": true,
   "scripts": {
-    "dev": "electron-vite dev",
-    "start": "electron-vite preview",
-    "build": "electron-vite build",
-    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "app": "npm run build && node scripts/run-app.mjs",
+    "build": "electron-vite build",
+    "dev": "electron-vite dev",
+    "dist": "npm run build && node scripts/prepare-win-codesign.mjs && electron-builder --win nsis",
+    "pack": "npm run build && node scripts/prepare-win-codesign.mjs && electron-builder --dir && node scripts/prune-locales.mjs",
+    "postinstall": "electron-builder install-app-deps",
+    "probe:packaged": "node scripts/probe-packaged.mjs",
+    "start": "electron-vite preview",
     "test:convert": "node scripts/node-convert-check.mjs",
     "test:regression": "npm run build && node scripts/run-regression.mjs",
-    "pack": "npm run build && electron-builder --dir",
-    "dist": "npm run build && electron-builder",
-    "postinstall": "electron-builder install-app-deps"
-  },
-  "dependencies": {
-    "docx": "^9.0.2",
-    "mammoth": "^1.8.0",
-    "pdfjs-dist": "^4.8.69"
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json"
   },
   "devDependencies": {
     "@esbuild/win32-x64": "^0.24.2",
@@ -31,36 +26,16 @@
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.3",
+    "docx": "^9.0.2",
     "electron": "^33.2.0",
     "electron-builder": "^25.1.8",
     "electron-vite": "^2.3.0",
+    "mammoth": "^1.8.0",
+    "pdfjs-dist": "^4.8.69",
     "pixi.js": "^8.5.2",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "typescript": "^5.6.3",
     "vite": "^5.4.11"
-  },
-  "build": {
-    "appId": "cn.hearth.desktop",
-    "productName": "Hearth",
-    "directories": {
-      "buildResources": "build"
-    },
-    "files": [
-      "out/**/*",
-      "resources/**/*"
-    ],
-    "win": {
-      "target": [
-        {
-          "target": "nsis",
-          "arch": ["x64"]
-        }
-      ]
-    },
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true
-    }
   }
 }

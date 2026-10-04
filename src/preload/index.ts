@@ -7,6 +7,7 @@ import type {
   Persona,
   ChatSession,
   EgressStatus,
+  LookupResult,
   WindowInfo,
   DroppedFile
 } from '../shared/types'
@@ -30,13 +31,20 @@ const api = {
 
   // —— 划词与对话 ——
   lookup: (word: string) => ipcRenderer.invoke('dict:lookup', word),
+  // —— 划词气泡 ——
+  bubbleDeepExplain: (word: string) => ipcRenderer.invoke('bubble:deepExplain', word),
+  closeBubble: (): void => ipcRenderer.send('bubble:close'),
+  onBubbleData: (cb: (p: { word: string; hit: LookupResult | null }) => void) => {
+    const handler = (_e: unknown, p: { word: string; hit: LookupResult | null }) => cb(p)
+    ipcRenderer.on('bubble:data', handler)
+    return () => { ipcRenderer.removeListener('bubble:data', handler) }
+  },
   deepExplain: (word: string, context: string) =>
     ipcRenderer.invoke('dict:deepExplain', word, context),
   ask: (question: string) => ipcRenderer.invoke('chat:ask', question),
   polish: (text: string, style: 'concise' | 'formal' | 'friendly') =>
     ipcRenderer.invoke('chat:polish', text, style),
-  getPersona: (): Promise<Persona> => ipcRenderer.invoke('chat:persona'),
-  savePersona: (p: Persona): Promise<Persona> => ipcRenderer.invoke('chat:savePersona', p),
+  getPersona: (): Promise<Persona> => ipcRenderer.invoke('chat:persona'),  savePersona: (p: Persona): Promise<Persona> => ipcRenderer.invoke('chat:savePersona', p),
   getSessions: (): Promise<ChatSession[]> => ipcRenderer.invoke('chat:sessions'),
   saveSession: (s: ChatSession): Promise<void> => ipcRenderer.invoke('chat:saveSession', s),
   deleteSession: (id: string): Promise<void> => ipcRenderer.invoke('chat:deleteSession', id),

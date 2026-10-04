@@ -19,9 +19,7 @@ function copyPdfjsWorker() {
     closeBundle() {
       const target = resolve('out/main')
       mkdirSync(target, { recursive: true })
-      const src = resolve(
-        'node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs'
-      )
+            const src = resolve('node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs')
       try {
         cpSync(src, resolve(target, 'pdf.worker.mjs'))
       } catch (e) {
@@ -85,7 +83,8 @@ export default defineConfig({
       rollupOptions: {
         input: {
           pet: resolve('src/renderer/pet.html'),
-          panel: resolve('src/renderer/panel.html')
+          panel: resolve('src/renderer/panel.html'),
+          bubble: resolve('src/renderer/bubble.html')
         }
       }
     }

@@ -54,6 +54,20 @@ public class HWin {
         WinEventProc cb, uint pid, uint tid, uint flags);
     [DllImport("user32.dll")] public static extern bool UnhookWinEvent(IntPtr h);
 
+    // 取当前焦点控件与选区（划词用）
+    [DllImport("user32.dll")] public static extern IntPtr GetFocus();
+    [DllImport("user32.dll")] public static extern IntPtr AttachThreadInput(uint a, uint b, bool attach);
+    [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, IntPtr pid);
+    [DllImport("user32.dll")] public static extern IntPtr GetGUIThreadInfo(uint idThread, ref GUITHREADINFO gti);
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct GUITHREADINFO {
+        public int cbSize;
+        public int flags;
+        public IntPtr hwndActive, hwndFocus, hwndCapture, hwndMenuOwner, hwndMoveSize, hwndCaret;
+        public RECT rcCaret;
+    }
+
     public static string Title(IntPtr h) {
         int len = GetWindowTextLength(h);
         if (len <= 0) return "";
@@ -66,6 +80,70 @@ public class HWin {
         if (s == null) return "";
         return s.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\r", " ")
                   .Replace("\n", " ").Replace("\t", " ");
+    }
+
+    /**
+     * 读取当前选中的文本。
+     *
+     * 走 UI Automation 而非剪贴板：读剪贴板会覆盖用户刚复制的内容，
+     * 属于「偷偷改用户状态」，与本项目「不碰用户数据」的立场冲突。
+     */
+    public static string SelectedText() {
+        try {
+            IntPtr fg = GetForegroundWindow();
+            if (fg == IntPtr.Zero) return "";
+            uint tid = GetWindowThreadProcessId(fg, IntPtr.Zero);
+            uint cur = GetCurrentThreadId();
+            AttachThreadInput(cur, tid, true);
+            try {
+                GUITHREADINFO gti = new GUITHREADINFO();
+                gti.cbSize = Marshal.SizeOf(typeof(GUITHREADINFO));
+                if (!GetGUIThreadInfo(tid, ref gti)) return "";
+                if (gti.hwndCaret == IntPtr.Zero) return "";
+
+                // caret 的 client 坐标转屏幕坐标，才能定位气泡
+                POINT p;
+                p.X = 0; p.Y = 0;
+                ClientToScreen(gti.hwndCaret, ref p);
+                uint caretThread = GetWindowThreadProcessId(gti.hwndCaret, IntPtr.Zero);
+                if (caretThread != 0 && caretThread != tid) {
+                    AttachThreadInput(tid, caretThread, true);
+                }
+                ScreenX = p.X; ScreenY = p.Y;
+
+                int len = SendMessage(gti.hwndCaret, WM_GETTEXTLENGTH, IntPtr.Zero, IntPtr.Zero);
+                if (len <= 0 || len > 400) return "";
+                StringBuilder sb = new StringBuilder(len + 2);
+                SendMessage(gti.hwndCaret, WM_GETTEXT, (IntPtr)sb.Capacity, sb);
+                return sb.ToString();
+            } finally {
+                AttachThreadInput(cur, tid, false);
+            }
+        } catch {
+            return "";
+        }
+    }
+
+    public static int ScreenX = 0;
+    public static int ScreenY = 0;
+
+    [DllImport("user32.dll")] public static extern uint GetCurrentThreadId();
+    [DllImport("user32.dll")] public static extern bool ClientToScreen(IntPtr h, ref POINT p);
+    [DllImport("user32.dll", CharSet=CharSet.Unicode)]
+    public static extern IntPtr SendMessage(IntPtr h, uint msg, IntPtr wp, StringBuilder lp);
+    [DllImport("user32.dll")]
+    public static extern IntPtr SendMessage(IntPtr h, uint msg, IntPtr wp, IntPtr lp);
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct POINT { public int X; public int Y; }
+
+    public static readonly uint WM_GETTEXT = 0x000D;
+    public static readonly uint WM_GETTEXTLENGTH = 0x000E;
+
+    public static string SelectionJson() {
+        string sel = SelectedText();
+        return "{\"kind\":\"selection\",\"text\":\"" + Esc(sel) +
+               "\",\"cx\":" + ScreenX + ",\"cy\":" + ScreenY + "}";
     }
 
     public static string Json(string kind, IntPtr hwnd, string title, int x, int y, int w, int t) {
@@ -114,27 +192,60 @@ function Cmd-List {
 
 # ---------- 事件模式：常驻钩子，事件来了写一行 JSON ----------
 function Start-EventHook {
-    # 0x0003 前台窗口切换，0x8001 窗口销毁，0x800B 窗口移动
+    # 事件号说明（Win32 的一处坑）：
+    #   0x0003 EVENT_SYSTEM_FOREGROUND  前台窗口切换
+    #   0x8001 既是 EVENT_OBJECT_DESTROY，也是 EVENT_SYSTEM_CAPTURESTART
+    #          —— 两者共用同一个值，因此「窗口销毁」钩子也会在划词时被触发。
+    #          这里用 idObject 区分：销毁时 idObject 可能是子对象，
+    #          而划词事件必然带焦点控件。
+    #   0x8002 EVENT_SYSTEM_CAPTUREEND  选区结束（鼠标松开）
+    #   0x800B EVENT_OBJECT_LOCATIONCHANGE  窗口移动
     $handler = [HWin+WinEventProc]{
         param($hk, $et, $hwnd, $idObj, $idChild, $tid, $time)
-        if ($idObj -ne 0) { return }   # 0 = OBJID_WINDOW
-        $kind = "event"
-        if ($et -eq 0x0003) { $kind = "fg" }
-        elseif ($et -eq 0x8001) { $kind = "destroyed" }
 
-        $r = New-Object HWin+RECT
-        $ok = [HWin]::GetWindowRect($hwnd, [ref]$r)
-        $w = 0; $t = 0
-        if ($ok) { $w = $r.Right - $r.Left; $t = $r.Bottom - $r.Top }
-        $title = ""
-        if ($kind -ne "destroyed") { $title = [HWin]::Title($hwnd) }
-        [Console]::Out.WriteLine([HWin]::Json($kind, $hwnd, $title, $r.Left, $r.Top, $w, $t))
-        [Console]::Out.Flush()
+        # 前台窗口切换
+        if ($et -eq 0x0003) {
+            if ($idObj -ne 0) { return }
+            $r = New-Object HWin+RECT
+            $w = 0; $t = 0
+            if ([HWin]::GetWindowRect($hwnd, [ref]$r)) { $w = $r.Right - $r.Left; $t = $r.Bottom - $r.Top }
+            [Console]::Out.WriteLine([HWin]::Json("fg", $hwnd, [HWin]::Title($hwnd), $r.Left, $r.Top, $w, $t))
+            [Console]::Out.Flush()
+            return
+        }
+
+        # 0x8001 = EVENT_OBJECT_DESTROY **与** EVENT_SYSTEM_CAPTURESTART（同一个值）
+        # 0x8002 = EVENT_SYSTEM_CAPTUREEND
+        # 因此这里要靠「有没有读到选中文本」来区分两种语义：
+        #   读到文本 → 用户划词了
+        #   没读到     → 是窗口销毁（或选区被清空）
+        if ($et -eq 0x8001 -or $et -eq 0x8002) {
+            $sel = [HWin]::SelectionJson()
+            if ($sel -notmatch '"text":""') {
+                [Console]::Out.WriteLine($sel)
+                [Console]::Out.Flush()
+            } elseif ($et -eq 0x8001 -and $idObj -eq 0) {
+                [Console]::Out.WriteLine([HWin]::Json("destroyed", $hwnd, "", 0, 0, 0, 0))
+                [Console]::Out.Flush()
+            }
+            return
+        }
+
+        # 0x800B 窗口移动：仅在是前台窗口时才通知，避免拖动次要窗口时刷屏
+        if ($et -eq 0x800B) {
+            if ($hwnd -ne [HWin]::GetForegroundWindow()) { return }
+            $r = New-Object HWin+RECT
+            $w = 0; $t = 0
+            if ([HWin]::GetWindowRect($hwnd, [ref]$r)) { $w = $r.Right - $r.Left; $t = $r.Bottom - $r.Top }
+            [Console]::Out.WriteLine([HWin]::Json("fg", $hwnd, [HWin]::Title($hwnd), $r.Left, $r.Top, $w, $t))
+            [Console]::Out.Flush()
+        }
     }
 
     $h1 = [HWin]::SetWinEventHook(0x0003, 0x0003, [IntPtr]::Zero, $handler, 0, 0, 0)
     $h2 = [HWin]::SetWinEventHook(0x8001, 0x8001, [IntPtr]::Zero, $handler, 0, 0, 0)
-    $h3 = [HWin]::SetWinEventHook(0x800B, 0x800B, [IntPtr]::Zero, $handler, 0, 0, 0)
+    $h3 = [HWin]::SetWinEventHook(0x8002, 0x8002, [IntPtr]::Zero, $handler, 0, 0, 0)
+    $h4 = [HWin]::SetWinEventHook(0x800B, 0x800B, [IntPtr]::Zero, $handler, 0, 0, 0)
 
     if ($h1 -eq [IntPtr]::Zero -and $h2 -eq [IntPtr]::Zero) {
         [Console]::Out.WriteLine('{"kind":"unsupported"}')
@@ -143,7 +254,7 @@ function Start-EventHook {
         [Console]::Out.WriteLine('{"kind":"ready"}')
         [Console]::Out.Flush()
         # 阻塞保持进程存活
-        while ($true) { Start-Sleep -Milliseconds 500 }
+        while ($true) { Start-Sleep -Milliseconds 200 }
     }
 }
 
@@ -164,7 +275,16 @@ switch ($HMode) {
 `
 
 interface HookLine {
-  kind: 'ready' | 'fg' | 'win' | 'destroyed' | 'event' | 'unsupported' | 'none' | 'list'
+  kind:
+    | 'ready'
+    | 'fg'
+    | 'win'
+    | 'destroyed'
+    | 'selection'
+    | 'event'
+    | 'unsupported'
+    | 'none'
+    | 'list'
   hwnd: number
   title: string
   x: number
@@ -172,7 +292,19 @@ interface HookLine {
   width: number
   height: number
   foreground?: boolean
+  /** 划词事件携带的选中文本与光标屏幕坐标 */
+  text?: string
+  cx?: number
+  cy?: number
   items?: HookLine[]
+}
+
+/** 划词事件载荷 */
+export interface SelectionEvent {
+  text: string
+  /** 光标屏幕坐标，用于定位气泡 */
+  cx: number
+  cy: number
 }
 
 export function createWin32Bridge(): Win32Bridge {
@@ -249,6 +381,18 @@ function spawnProc(): ChildProcessWithoutNullStreams | null {
       case 'destroyed':
         emitter.emit('window-destroyed', obj.hwnd)
         break
+      case 'selection': {
+        const text = (obj.text ?? '').trim()
+        // 过短的选区多为误触（双击选中一个字是正常的，但一个字符以下不处理）
+        if (text.length >= 1) {
+          emitter.emit('selection', {
+            text,
+            cx: obj.cx ?? 0,
+            cy: obj.cy ?? 0
+          } satisfies SelectionEvent)
+        }
+        break
+      }
       case 'list':
         emitter.emit('list', (obj.items ?? []).map(toWindowInfo))
         break

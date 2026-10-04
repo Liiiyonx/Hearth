@@ -24,6 +24,7 @@ import {
 } from 'docx'
 import { convert } from '../services/convert'
 import { initStore } from '../store'
+import { resolveSelection, bubbleSize } from '../services/selection'
 
 interface Check {
   name: string
@@ -345,6 +346,36 @@ export async function runRegression(workDir: string): Promise<boolean> {
       record('中文 PDF → Word', false, r3.error || '')
     }
   }
+
+  // ---- 划词过滤 ----
+  console.log('\n[4] 划词即译')
+  const hit = await resolveSelection('robust')
+  record('本地词典命中常用词', hit?.hit !== null, hit ? `${hit.word} → ${hit.hit?.meanings[0] ?? ''}` : '未触发')
+
+  const multi = await resolveSelection('baseline proximity')
+  record('词组取最长词查询', multi?.word === 'proximity', `实得「${multi?.word}」`)
+
+  const junkCases: [string, string][] = [
+    ['https://example.com/page', '网址'],
+    ['1234 + 5678', '纯数字'],
+    ['C:\\Users\\test', 'Windows 路径'],
+    ['const x = {a: 1}', '代码片段'],
+    ['中文选区内容', '不含英文字母'],
+    ['', '空选区']
+  ]
+  for (const [text, why] of junkCases) {
+    const r = await resolveSelection(text)
+    record(`噪音选区被忽略（${why}）`, r === null, text.slice(0, 24))
+  }
+
+  const long = await resolveSelection('a'.repeat(60))
+  record('超长选区被忽略', long === null)
+
+  record(
+    '气泡尺寸随内容自适应',
+    bubbleSize('robust').width < bubbleSize('a'.repeat(35)).width,
+    `${bubbleSize('robust').width}px → ${bubbleSize('a'.repeat(35)).width}px`
+  )
 
   // ---- 扫描件识别 ----
   console.log('\n[3] 边界情况')

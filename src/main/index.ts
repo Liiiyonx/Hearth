@@ -11,6 +11,8 @@ import type {
 } from '../shared/types'
 import { convert, convertBatch, inferDirection } from './services/convert'
 import { lookup } from './services/dictionary'
+import { resolveSelection, bubbleSize } from './services/selection'
+import type { LookupResult } from '../shared/types'
 import { ask, polishText, cloudReady, setEgressListener, deepExplain } from './services/llm'
 import { createWin32Bridge, screenSize } from './services/win32'
 import {
@@ -41,6 +43,8 @@ let petWindow: BrowserWindow | null = null
 let panelWindow: BrowserWindow | null = null
 let tray: Tray | null = null
 let win32: ReturnType<typeof createWin32Bridge> | null = null
+/** 最近一次划词的光标屏幕坐标，气泡据此定位 */
+let selectionAnchor = { x: 0, y: 0 }
 let currentEgress: EgressStatus = {
   state: 'idle',
   detail: '无数据离开本机'
@@ -176,6 +180,97 @@ function showPanel(): void {
   if (panelWindow.isMinimized()) panelWindow.restore()
   panelWindow.show()
   panelWindow.focus()
+}
+
+// ==== 划词气泡窗口 ====
+
+let bubbleWindow: BrowserWindow | null = null
+let bubbleHideTimer: NodeJS.Timeout | null = null
+
+function createBubbleWindow(): BrowserWindow {
+  const { width, height } = bubbleSize('placeholder')
+
+  const win = new BrowserWindow({
+    width,
+    height,
+    show: false,
+    frame: false,
+    transparent: true,
+    hasShadow: false,
+    resizable: false,
+    skipTaskbar: true,
+    alwaysOnTop: true,
+    focusable: false,
+    // 气泡不能抢焦点，否则用户会丢失原本的输入上下文
+    webPreferences: {
+      preload: path.join(__dirname_, '../preload/index.mjs'),
+      contextIsolation: true,
+      nodeIntegration: false
+    }
+  })
+
+  win.setAlwaysOnTop(true, 'screen-saver')
+  win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+
+  const html = path.join(__dirname_, '../renderer/bubble.html')
+  if (isDev) win.loadURL(`file://${html}`).catch(() => {})
+  else win.loadFile(html).catch(() => {})
+
+  win.on('closed', () => {
+    bubbleWindow = null
+  })
+
+  // 失焦即隐藏：用户去别处干活了，气泡就该消失
+  win.on('blur', () => {
+    if (bubbleWindow && !bubbleWindow.webContents.isDevToolsOpened()) {
+      bubbleWindow.hide()
+    }
+  })
+
+  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+  win.webContents.on('will-navigate', (e) => e.preventDefault())
+
+  return win
+}
+
+/** 在光标附近弹出气泡 */
+function showBubble(word: string, hit: LookupResult | null): void {
+  if (!bubbleWindow) bubbleWindow = createBubbleWindow()
+
+  const { width, height } = bubbleSize(word)
+  bubbleWindow.setSize(width, height)
+
+  // 贴着选区显示，并保证不出屏
+  const { width: sw, height: sh } = screenSize()
+  const x = Math.min(Math.max(4, selectionAnchor.x), Math.max(4, sw - width - 4))
+  const y = Math.min(
+    Math.max(4, selectionAnchor.y + 18),
+    Math.max(4, sh - height - 4)
+  )
+  bubbleWindow.setPosition(Math.round(x), Math.round(y), false)
+
+  bubbleWindow.webContents.send('bubble:data', { word, hit })
+  bubbleWindow.showInactive()
+
+  // 兜底自动消失，避免忘记关的气泡一直挂着
+  if (bubbleHideTimer) clearTimeout(bubbleHideTimer)
+  bubbleHideTimer = setTimeout(() => bubbleWindow?.hide(), 8000)
+}
+
+function hideBubble(): void {
+  if (bubbleHideTimer) clearTimeout(bubbleHideTimer)
+  bubbleWindow?.hide()
+}
+
+/** 划词事件处理：本地词典命中就弹，否则安静地什么都不做 */
+async function onSelection(text: string, cx: number, cy: number): Promise<void> {
+  selectionAnchor = { x: cx, y: cy }
+  const settings = await getSettings()
+  if (!settings.enableSelectionLookup) return
+
+  const r = await resolveSelection(text)
+  if (!r) return
+  showBubble(r.word, r.hit)
 }
 
 // ==== 托盘 ====
@@ -400,6 +495,10 @@ function registerIpc(): void {
 
   ipcMain.on('panel:close', () => panelWindow?.hide())
 
+  // —— 划词气泡 ——
+  ipcMain.handle('bubble:deepExplain', async (_e, word: string) => deepExplain(word, ''))
+  ipcMain.on('bubble:close', () => hideBubble())
+
   ipcMain.on('app:getEgress', (e) => {
     e.sender.send('egress:changed', currentEgress)
   })
@@ -443,6 +542,11 @@ function wireWin32(): void {
   })
   e.on('unsupported', () => {
     petWindow?.webContents.send('win:unsupported')
+  })
+
+  // 划词：拿到选区就查本地词典，命中才弹气泡
+  e.on('selection', (sel: { text: string; cx: number; cy: number }) => {
+    void onSelection(sel.text, sel.cx, sel.cy)
   })
 
   win32.start()
