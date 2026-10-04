@@ -146,7 +146,13 @@ export interface AppSettings {
   alwaysOnTop: boolean
   /** 鼠标穿透 */
   clickThrough: boolean
-  /** 空闲降帧目标 */
+  /**
+   * 空闲降帧目标（帧/秒）。
+   *
+   * 注意：实测从 8 降到 6 对 CPU 占用**没有可测影响**（3.0% → 3.0%），
+   * 说明空闲时的 CPU 开销主要来自 Chromium 自身（合成、IPC、定时器），
+   * 而非我们的重绘。所以不要为了「看起来更省」而牺牲动画顺滑度。
+   */
   idleFps: number
   /** 免费档每日转换额度 */
   dailyFreeQuota: number

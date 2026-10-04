@@ -492,6 +492,10 @@ function registerIpc(): void {
     if (patch.petTheme) {
       petWindow?.webContents.send('pet:theme', saved.petTheme)
     }
+    // 其它设置（如空闲帧率）也要让桌宠立即生效
+    if (patch.idleFps !== undefined) {
+      petWindow?.webContents.send('settings:changed', saved)
+    }
     return saved
   })
   ipcMain.handle('settings:autolaunch', async (_e, enable: boolean) => setAutoLaunch(enable))

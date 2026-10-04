@@ -56,17 +56,21 @@ function PetApp(): React.JSX.Element {
     let disposed = false
 
     void (async () => {
-      // 先读设置里的形象主题，实现「打开就用上次选的形象」
+      // 先读设置：形象主题 + 空闲帧率
+      // 之前 idleFps 是写死的 8，AppSettings.idleFps 这个字段根本没被用过——
+      // 用户在面板里调了也没效果，属于「声明了但没实现」。
       let theme: PetThemeId = 'spider'
+      let idleFps = 8
       try {
         const s = await window.uninvited.getSettings()
         theme = s.petTheme ?? 'spider'
+        idleFps = s.idleFps ?? 8
       } catch {
-        /* 设置读不到就用默认形象 */
+        /* 设置读不到就用默认值 */
       }
 
       try {
-        await stage.init(canvas, 8)
+        await stage.init(canvas, idleFps)
         stage.setTheme(theme)
       } catch (e) {
         // 初始化失败要让冒烟测试看得见，否则表现为「一片空白」无从排查
@@ -78,6 +82,11 @@ function PetApp(): React.JSX.Element {
       ;(window as unknown as Record<string, unknown>).__petReady = true
       ;(window as unknown as Record<string, unknown>).__stage = stage
       window.uninvited.setPetPosition(behavior.x, behavior.y)
+
+      // 面板里调了空闲帧率 → 立即生效
+      window.uninvited.onSettingsChanged((s) => {
+        stage.setIdleFps(s.idleFps ?? 8)
+      })
 
       // 面板里换了形象 → 这里立即重建，无需重启
       window.uninvited.onThemeChanged((id) => {

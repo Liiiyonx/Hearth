@@ -43,6 +43,11 @@ const api = {
   },
 
   // —— 桌宠形象 ——
+  onSettingsChanged: (cb: (s: AppSettings) => void) => {
+    const handler = (_e: unknown, s: AppSettings) => cb(s)
+    ipcRenderer.on('settings:changed', handler)
+    return () => { ipcRenderer.removeListener('settings:changed', handler) }
+  },
   onThemeChanged: (cb: (id: PetThemeId) => void) => {
     const handler = (_e: unknown, id: PetThemeId) => cb(id)
     ipcRenderer.on('pet:theme', handler)
