@@ -270,6 +270,47 @@ AI 出图的白底往往带渐变或偏色（实测这批图背景从 228 到 25
 新增主题只需在 `themes.ts` 里加一条 `ThemeDef`，再在 `shared/types.ts` 的
 `THEME_OPTIONS` 里补一项，无需改动其它代码。
 
+## 打包（Windows）
+
+### 当前状态：installer 需管理员权限，便携版可直接用
+
+**免安装版（现在就能用）**：
+
+```bash
+npm run build
+npx electron-builder --win portable
+# 产物：dist-portable/win-unpacked/uninvited.exe（188MB，可直接运行）
+```
+
+**installer（NSIS）需要额外权限**，原因如下。
+
+### 拦路虎：winCodeSign 的 macOS 符号链接
+
+electron-builder 解包 `winCodeSign-2.6.0.7z` 时，要创建
+`darwin/10.12/lib/{libssl,libcrypto}.dylib` 两个**符号链接**。
+7za.exe 创建链接需要 `SE_CREATE_SYMBOLIC_LINK` 特权，
+非管理员会话下报「客户端没有所需的特权」，重试 3 次后打包中断。
+
+**这不是配置问题，是环境权限问题。** 解决方式二选一：
+
+- **开启 Windows 开发者模式**（设置 → 系统 → 开发者选项 → 开发人员模式）
+- 用管理员权限运行打包命令
+
+### 已排除的绕行方案（都试过，不可行）
+
+| 方案 | 结果 |
+|---|---|
+| 重打包去掉符号链接 | ❌ 归档 sha512 写死在 app-builder 里，改字节即 `checksum mismatch` |
+| `DOWNLOAD_OVERRIDE_URL` | ❌ 签名工具走 `getBin("winCodeSign")` 不传 url，不读该变量 |
+| `SEVEN_ZIP_BIN_PATH` / 改 PATH | ❌ app-builder 按绝对路径调用 node_modules 里的 7za.exe |
+| 预置目标目录让其跳过解包 | ❌ 预置文件会让 7za 弹交互式覆盖询问，非交互环境直接挂起 |
+
+一个值得记下的事实：**7za 的解包其实成功了** ——
+`signtool.exe`、`rcedit-x64.exe` 全部到位，只有那两个 macOS dylib 失败，
+功能上零损失。但 app-builder 只看退出码，非 0 就判失败。
+
+完整记录见 `scripts/build-installer.mjs` 的文件头注释。
+
 ## 已知限制
 
 - **安装包 237MB，超出方案书 80MB 预算**：Electron 运行时本身占约 181MB，

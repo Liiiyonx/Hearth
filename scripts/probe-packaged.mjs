@@ -11,7 +11,11 @@ import { fileURLToPath } from 'node:url'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const root = path.resolve(here, '..')
-const exe = path.join(root, 'dist', 'win-unpacked', 'Hearth.exe')
+// 允许指定打包目录，便于验证不同 target 产物
+const distDir = process.argv[2]
+  ? path.resolve(root, process.argv[2])
+  : path.join(root, 'dist-build', 'win-unpacked')
+const exe = path.join(distDir, 'uninvited.exe')
 
 if (!existsSync(exe)) {
   console.error(`找不到 ${exe}`)

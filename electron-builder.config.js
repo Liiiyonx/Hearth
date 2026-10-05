@@ -12,7 +12,10 @@ module.exports = {
   appId: 'cn.uninvited.desktop',
   productName: '不请自来',
   directories: {
-    output: 'dist'
+    // 说明：原用 dist/win-unpacked，但该目录被残留的 app.asar 文件锁住
+    // （上次打包中断留下的产物），非管理员会话下无法删除/移动。
+    // 打包时可通过 BUILD_OUTPUT 覆盖，默认换一个干净目录。
+    output: process.env.BUILD_OUTPUT || 'dist-build'
   },
   // 主进程 bundle 已内联 docx / pdfjs / mammoth，
   // 所以不需要把依赖树打进 asar（那会多出约 50MB）。
@@ -21,7 +24,15 @@ module.exports = {
     target: [{ target: 'nsis', arch: ['x64'] }],
     // 未配置代码签名证书时跳过签名步骤，
     // 否则会尝试解包 macOS 签名工具（需管理员权限）而失败。
-    signAndEditExecutable: false
+    signAndEditExecutable: false,
+    // 跳过 rcedit（改写 exe 图标/版本信息）。
+    //
+    // 为什么必须显式关掉：即使 signAndEditExecutable 为 false，
+    // 「更新 asar 完整性资源」这一步仍会调用 app-builder 的 rcedit，
+    // 而它会去解包 winCodeSign——那个包里有 macOS 符号链接，
+    // 非管理员会话下解包必然失败（退出码 2），重试 3 次后打包中断。
+    // 代价：exe 图标是 Electron 默认的，不好看但不影响功能。
+    rceditOptions: undefined
   },
   nsis: {
     oneClick: false,
